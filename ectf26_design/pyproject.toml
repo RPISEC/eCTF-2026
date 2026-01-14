@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ectf26_design"
+version = "2026.0+example"
+requires-python = ">=3.12"
+
+# TODO: add your custom dependencies to this list
+dependencies = [
+    "loguru",
+]
+
+[project.scripts]
+secrets = "gen_secrets:main"
+
+
+[tool.black]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
