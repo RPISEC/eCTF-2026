@@ -11,7 +11,6 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-#if CRYPTO_EXAMPLE
 
 #include "simple_crypto.h"
 #include "security.h"
@@ -105,5 +104,3 @@ int hash(void *data, size_t len, uint8_t *hash_out) {
     // Pass values to hash
     return wc_Md5Hash((uint8_t *)data, len, hash_out);
 }
-
-#endif
