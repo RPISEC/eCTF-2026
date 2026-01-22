@@ -55,7 +55,7 @@ void generate_list_files(list_response_t *file_list) {
 /** @brief Perform the list operation
  *
  *  @param pkt_len The length of the incoming packet
- *  @param buf A pointer the incoming message buffer
+ *  @param buf A pointer to the incoming message buffer
  *
  * @return 0 upon success. A negative value on error.
 */

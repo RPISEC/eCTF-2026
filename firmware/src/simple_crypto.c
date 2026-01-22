@@ -15,6 +15,7 @@
 
 #include "simple_crypto.h"
 #include "security.h"
+#include "secrets.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -104,6 +105,13 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintex
 int hash(void *data, size_t len, uint8_t *hash_out) {
     // Pass values to hash
     return wc_Md5Hash((uint8_t *)data, len, hash_out);
+}
+
+int derive_key(byte *key_out, char* pin, char* salt) {
+    // TODO implement with bscrypt instead, but that needs to be added as a
+    // dependency for imo only marginal benefit. We need to calculate how long
+    // an attack on this would be. 1+ week on consumer hardware is good enough.
+    return wc_PBKDF2(key_out, pin, PIN_LENGTH, salt, SALT_LENGTH, KDF_ITERS, KEY_SIZE, WC_HASH_TYPE_BLAKE2S);
 }
 
 #endif

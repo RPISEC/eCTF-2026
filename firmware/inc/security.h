@@ -18,6 +18,7 @@
 
 #define MAX_PERMS 8
 #define PIN_LENGTH 6
+#define SALT_LENGTH 16
 
 typedef enum {
     PERM_READ = 'R',

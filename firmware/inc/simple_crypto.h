@@ -17,13 +17,20 @@
 
 #include <stdint.h>
 
+#include <security.h>
+
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/hash.h"
+#include "wolfssl/wolfcrypt/pwdbased.h"
 
 /******************************** MACRO DEFINITIONS ********************************/
 #define BLOCK_SIZE AES_BLOCK_SIZE
 #define KEY_SIZE 16
 #define HASH_SIZE MD5_DIGEST_SIZE
+#define KDF_MODE_CHECK 1
+#define KDF_MODE_DECRYPT 2
+#define KDF_ITERS 1000
+#define PRIVATE_KEY_LEN 128
 
 /******************************** FUNCTION PROTOTYPES ********************************/
 /** @brief Encrypts plaintext using a symmetric cipher
@@ -67,6 +74,17 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintex
  * @return 0 on success, non-zero for other error
  */
 int hash(void *data, size_t len, uint8_t *hash_out);
+
+/** @brief Derives a key from some data
+ * @param key_out A pointer to a buffer of length KEY_SIZE where the resulting
+ *           key output will be written to
+ * @param data A pointer to a buffer of length len containing the data
+ *           to derive the key from.
+ * @param len A pointer a buffer of length len containing the salt.
+ *
+ * @return 0 on success, some wolfcrypterrorcode on failture.
+ */
+int derive_key(byte *key_out, char* pin, char* salt);
 
 #endif // CRYPTO_EXAMPLE
 #endif // ECTF_CRYPTO_H
