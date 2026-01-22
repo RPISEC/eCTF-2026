@@ -1,9 +1,3 @@
-# eCTF Insecure Example
-
-This repository holds the insecure example design for an eCTF Hardware Security Module.
-The rules for the 2026 eCTF can be found here: https://rules.ectf.mitre.org/. Your team
-should **NOT fork this repo**. Instead clone it and push to a new __private__ repo.
-
 ## Layout
 
 - `firmware/` - Source code to build the firmware
@@ -19,3 +13,10 @@ should **NOT fork this repo**. Instead clone it and push to a new __private__ re
         - `gen_secrets.py` - Generates shared secrets
     - `pyproject.toml` - File that tells pip how to install this module
 - `Makefile` - Helper script to simplify repetitive build steps
+
+
+## Programming Guidelines
+- Document everything and use good code style
+- Avoid storing large objects on the stack; use static memory instead
+- Zero secrets immediately after using them
+- Test API before merging
