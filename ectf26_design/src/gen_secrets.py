@@ -1,6 +1,7 @@
 """
 Author: Ben Janis
 Date: 2026
+Modified By: Jaden
 
 This source file is part of an example system for MITRE's 2026 Embedded CTF
 (eCTF). This code is being provided only for educational purposes for the 2026 MITRE
@@ -12,6 +13,7 @@ Copyright: Copyright (c) 2026 The MITRE Corporation
 
 import argparse
 import json
+import secrets
 from pathlib import Path
 
 from loguru import logger
@@ -32,22 +34,22 @@ def gen_secrets(groups: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
-    # TODO: Update this function to generate any system-wide secrets needed by
-    #   your design
+    # Deployment-wide secret material. This stays in the secrets file and is
+    # wrapped per-board during firmware build.
+    global_secret = secrets.token_bytes(32)
 
-    # Create the secrets object
-    # You can change this to generate any secret material
-    # The secrets file will never be shared with attackers
-    secrets = {
+    # Create the secrets object. This file never ships on a device.
+    secrets_data = {
         "groups": groups,
-        "some_secrets": "EXAMPLE",
+        "global_secret": global_secret.hex(),
+        "global_secret_len": len(global_secret),
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not
     # be able to store binary data, and must either use a different file
     # type or encode the binary data to hex, base64, or another type of
     # ASCII-only encoding
-    return json.dumps(secrets).encode()
+    return json.dumps(secrets_data).encode()
 
 
 def parse_args():
@@ -86,8 +88,6 @@ def main():
 
     # Print the generated secrets for your own debugging
     # Attackers will NOT have access to the output of this, but feel free to remove
-    #
-    # NOTE: Printing sensitive data is generally not good security practice
     logger.debug(f"Generated secrets: {secrets}")
 
     # Open the file, erroring if the file exists unless the --force arg is provided
