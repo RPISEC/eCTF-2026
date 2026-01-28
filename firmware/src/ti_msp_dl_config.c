@@ -52,6 +52,10 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_SYSCTL_init();
     SYSCFG_DL_UART_0_init();
     SYSCFG_DL_UART_1_init();
+        /* Ensure VBAT Power domain status is good before any initialization */
+    while ((DL_SYSCTL_getStatus() & (DL_SYSCTL_STATUS_VBAT_GOOD)) !=
+        (DL_SYSCTL_STATUS_VBAT_GOOD));
+    SYSCFG_DL_IWDT_init();
 }
 
 SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
@@ -103,6 +107,22 @@ SYSCONFIG_WEAK void SYSCFG_DL_SYSCTL_init(void)
 
 }
 
+
+SYSCONFIG_WEAK void SYSCFG_DL_IWDT_init(void)
+{
+    /*
+    *   Initialize IWDT with following settings:
+    *   Watchdog Source Clock = (LFOSC Freq) / (IWDT Clock Divider)
+    *                         = 32768Hz / 3 = 10.92 kHz
+    *   Watchdog Period       = (IWDT Clock Divider) ∗ (IWDT Period Count) / 32768Hz
+    *                         = 3 * 2^15 / 32768Hz = 3.00 s
+    */
+    DL_IWDT_setClockDivider(IWDT_INST, DL_IWDT_CLOCK_DIVIDE_3);
+    DL_IWDT_setTimerPeriod(IWDT_INST, DL_IWDT_TIMER_PERIOD_15_BITS);
+
+    DL_IWDT_enableWriteProtect(IWDT_INST);
+    DL_IWDT_enableModule(IWDT_INST);
+}
 
 static const DL_UART_Main_ClockConfig gUART_0ClockConfig = {
     .clockSel    = DL_UART_MAIN_CLOCK_BUSCLK,
