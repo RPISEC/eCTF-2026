@@ -37,12 +37,13 @@ def gen_secrets(groups: list[int]) -> bytes:
     # Deployment-wide secret material. This stays in the secrets file and is
     # wrapped per-board during firmware build.
     global_secret = secrets.token_bytes(32)
+    magic_token = secrets.token_bytes(16)
 
     # Create the secrets object. This file never ships on a device.
     secrets_data = {
         "groups": groups,
         "global_secret": global_secret.hex(),
-        "global_secret_len": len(global_secret),
+        "magic_token": magic_token.hex(),
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not

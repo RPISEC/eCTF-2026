@@ -16,7 +16,8 @@ import json
 import argparse
 import hashlib
 from dataclasses import dataclass
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+PBKDF2_ITERATIONS = 100000
 
 
 @dataclass
@@ -93,6 +94,14 @@ def _load_global_secret(secrets_blob):
     return bytes.fromhex(secret_hex)
 
 
+def _load_magic_token(secrets_blob):
+    payload = json.loads(secrets_blob.decode())
+    token_hex = payload.get("magic_token")
+    if not token_hex:
+        raise ValueError("Secrets file missing magic_token")
+    return bytes.fromhex(token_hex)
+
+
 def _write_c_array(f, name, data, columns=12):
     f.write(f"static const uint8_t {name}[{len(data)}] = {{\n")
     for offset in range(0, len(data), columns):
@@ -105,33 +114,34 @@ def secrets_to_c_header(
     permissions: PermissionList, path: str, hsm_pin: str, secrets: bytes
 ):
 
-    # Wrap the deployment-wide secret with a per-board KEK derived from the PIN.
+    # Wrap deployment-wide secret material with a per-board mask derived from the PIN.
     global_secret = _load_global_secret(secrets)
+    magic_token = _load_magic_token(secrets)
+    if len(global_secret) != 32:
+        raise ValueError("global_secret must be 32 bytes")
+    if len(magic_token) != 16:
+        raise ValueError("magic_token must be 16 bytes")
+
+    blob = global_secret + magic_token
     salt = os.urandom(16)
-    iv = os.urandom(12)
     pin_bytes = hsm_pin.encode("utf-8")
-    kek = hashlib.pbkdf2_hmac("sha256", pin_bytes, salt, 10000, dklen=16)
-    aesgcm = AESGCM(kek)
-    ciphertext_with_tag = aesgcm.encrypt(iv, global_secret, None)
-    wrapped_secret = ciphertext_with_tag[:-16]
-    tag = ciphertext_with_tag[-16:]
-    # Stored for PIN verification before attempting unwrap.
-    pin_verifier = hashlib.sha256(pin_bytes + salt).digest()
+    mask = hashlib.pbkdf2_hmac(
+        "sha256",
+        pin_bytes,
+        salt,
+        PBKDF2_ITERATIONS,
+        dklen=len(blob),
+    )
+    wrapped_blob = bytes(b ^ m for b, m in zip(blob, mask))
 
     with open(os.path.join(path, "secrets.h"), 'w') as f:
         f.write("#ifndef __SECRETS_H__\n")
         f.write("#define __SECRETS_H__\n\n")
         f.write('#include "security.h"\n\n')
-        f.write("#define WRAPPED_SECRET_SALT_LEN 16\n")
-        f.write("#define WRAPPED_SECRET_IV_LEN 12\n")
-        f.write("#define WRAPPED_SECRET_TAG_LEN 16\n")
-        f.write(f"#define WRAPPED_SECRET_LEN {len(wrapped_secret)}\n")
-        f.write("#define PIN_VERIFIER_LEN 32\n\n")
-        _write_c_array(f, "wrapped_secret_salt", salt)
-        _write_c_array(f, "wrapped_secret_iv", iv)
-        _write_c_array(f, "wrapped_secret_tag", tag)
-        _write_c_array(f, "wrapped_secret", wrapped_secret)
-        _write_c_array(f, "pin_verifier", pin_verifier)
+        f.write("#define PBKDF2_ITERATIONS 100000\n\n")
+        _write_c_array(f, "secrets_salt", salt)
+        _write_c_array(f, "wrapped_blob", wrapped_blob)
+        _write_c_array(f, "expected_magic", magic_token)
         f.write("const static group_permission_t global_permissions[MAX_PERMS] = {\n")
         for i, perm in enumerate(permissions):
             f.write(
