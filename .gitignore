@@ -338,3 +338,4 @@ wolfssl/
 *.secrets.txt
 **/secrets.h
 uv.lock
+firmware/compile_commands.json

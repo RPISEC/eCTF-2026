@@ -2,9 +2,9 @@ MSPM0_SDK_INSTALL_DIR ?= $(abspath ../../../../../..)
 
 include $(MSPM0_SDK_INSTALL_DIR)/tools/imports_mak/imports.mak.linux
 
-CC = "$(TICLANG_ARMCOMPILER)/bin/tiarmclang"
-LNK = "$(TICLANG_ARMCOMPILER)/bin/tiarmclang"
-OBJCOPY = "$(TICLANG_ARMCOMPILER)/bin/tiarmobjcopy"
+CC = $(TICLANG_ARMCOMPILER)/bin/tiarmclang
+LNK = $(TICLANG_ARMCOMPILER)/bin/tiarmclang
+OBJCOPY = $(TICLANG_ARMCOMPILER)/bin/tiarmobjcopy
 BUILDDIR ?= /tmp/build
 VPATH = "src"
 LINKERFILE = "firmware.ld"
@@ -55,9 +55,9 @@ NAME = hsm
 CFLAGS += -I.. \
     -D__MSPM0L2228__ \
     -O2 \
-    "-I$(MSPM0_SDK_INSTALL_DIR)/source/third_party/CMSIS/Core/Include" \
-    "-I$(MSPM0_SDK_INSTALL_DIR)/source" \
-	"-I./inc" \
+    -I$(MSPM0_SDK_INSTALL_DIR)/source/third_party/CMSIS/Core/Include \
+    -I$(MSPM0_SDK_INSTALL_DIR)/source \
+	-I./inc \
     -gdwarf-3 \
     -mcpu=cortex-m0plus \
     -march=thumbv6m \
@@ -104,3 +104,21 @@ clean:
 	@ $(RM) $(OBJECTS) > $(DEVNULL) 2>&1
 	@ $(RM) $(NAME).elf > $(DEVNULL) 2>&1
 	@ $(RM) $(NAME).map > $(DEVNULL) 2>&1
+
+
+CLANGD_DB = compile_commands.json
+
+clangd-db:
+	@echo "Generating $(CLANGD_DB)"
+	@echo '[' > $(CLANGD_DB)
+	@first=1; \
+	for f in src/*.c; do \
+		if [ $$first -eq 0 ]; then echo ',' >> $(CLANGD_DB); fi; \
+		first=0; \
+		echo '  {' >> $(CLANGD_DB); \
+		echo '    "directory": "$(PROJECT_ROOT)/firmware",' >> $(CLANGD_DB); \
+		echo '    "command": "$(CC) $(CFLAGS) -c '$$f'",' >> $(CLANGD_DB); \
+		echo '    "file": "'$$f'"' >> $(CLANGD_DB); \
+		echo '  }' >> $(CLANGD_DB); \
+	done
+	@echo ']' >> $(CLANGD_DB)
