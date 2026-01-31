@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 MAX_WALLET_GROUPS = 8
+WALLET_VERSION = 1
 K_TRANSIT_LEN = 32
 K_STORAGE_LEN = 32
 ED25519_PRIV_LEN = 32
@@ -33,6 +34,7 @@ PIN_CHECK_ITERS = 100000
 WALLET_KDF_ITERS = 100000
 WALLET_AAD = b"WALLETv1"
 WALLET_ENTRY_LEN = 2 + 1 + 1 + K_TRANSIT_LEN + K_STORAGE_LEN + ED25519_PRIV_LEN + ED25519_PUB_LEN
+WALLET_HEADER_LEN = 8
 
 
 @dataclass
@@ -115,6 +117,11 @@ def _decode_hex_field(entry, field_name, expected_len):
     return value
 
 
+def _require_field(entry, field_name, group_key):
+    if field_name not in entry:
+        raise ValueError(f"Missing {field_name} for group {group_key}")
+
+
 def _write_c_array(f, name, data, columns=12):
     f.write(f"static const uint8_t {name}[{len(data)}] = {{\n")
     for offset in range(0, len(data), columns):
@@ -133,18 +140,26 @@ def secrets_to_c_header(
     payload = _load_payload(secrets)
     groups_payload = payload.get("groups", {})
 
-    # Wallet layout per entry:
+    # Wallet layout:
+    # [u32 version][u32 num_groups]
+    # followed by MAX_WALLET_GROUPS entries:
     # [u16 group_id][u8 perms][u8 reserved][k_transit][k_storage][ed25519_priv][ed25519_pub]
     wallet_plain = bytearray()
+    wallet_plain.extend(WALLET_VERSION.to_bytes(4, "little"))
+    wallet_plain.extend(len(permissions).to_bytes(4, "little"))
     for perm in permissions:
         group_key = f"{perm.group_id:04x}"
-        entry = groups_payload.get(group_key, {})
+        entry = groups_payload.get(group_key)
+        if entry is None:
+            raise ValueError(f"Missing group {group_key} in secrets file")
         perms_byte = (1 if perm.read else 0) | (2 if perm.write else 0) | (4 if perm.receive else 0)
         wallet_plain.extend(perm.group_id.to_bytes(2, "little"))
         wallet_plain.append(perms_byte)
         wallet_plain.append(0x00)
 
         if perm.receive:
+            _require_field(entry, "k_transit", group_key)
+            _require_field(entry, "ed25519_pub", group_key)
             k_transit = _decode_hex_field(entry, "k_transit", K_TRANSIT_LEN)
             ed_pub = _decode_hex_field(entry, "ed25519_pub", ED25519_PUB_LEN)
         else:
@@ -152,11 +167,13 @@ def secrets_to_c_header(
             ed_pub = bytes(ED25519_PUB_LEN)
 
         if perm.read or perm.write:
+            _require_field(entry, "k_storage", group_key)
             k_storage = _decode_hex_field(entry, "k_storage", K_STORAGE_LEN)
         else:
             k_storage = bytes(K_STORAGE_LEN)
 
         if perm.write:
+            _require_field(entry, "ed25519_priv", group_key)
             ed_priv = _decode_hex_field(entry, "ed25519_priv", ED25519_PRIV_LEN)
         else:
             ed_priv = bytes(ED25519_PRIV_LEN)
@@ -166,7 +183,7 @@ def secrets_to_c_header(
         wallet_plain.extend(ed_priv)
         wallet_plain.extend(ed_pub)
 
-    while len(wallet_plain) < WALLET_ENTRY_LEN * MAX_WALLET_GROUPS:
+    while len(wallet_plain) < WALLET_HEADER_LEN + (WALLET_ENTRY_LEN * MAX_WALLET_GROUPS):
         wallet_plain.extend(bytes(WALLET_ENTRY_LEN))
 
     pin_bytes = hsm_pin.encode("ascii")
@@ -193,7 +210,7 @@ def secrets_to_c_header(
     wallet_ct = wallet_ct_with_tag[:-WALLET_TAG_LEN]
     wallet_tag = wallet_ct_with_tag[-WALLET_TAG_LEN:]
 
-    # Self-test the wrapping path to avoid emitting an unrecoverable wallet.
+    # self test the wrapping path to avoid emitting an unrecoverable wallet
     wallet_round_trip = aesgcm.decrypt(wallet_nonce, wallet_ct_with_tag, WALLET_AAD)
     if wallet_round_trip != bytes(wallet_plain):
         raise ValueError("Wallet round-trip check failed.")
@@ -208,6 +225,8 @@ def secrets_to_c_header(
         f.write(f"#define WALLET_SALT_LEN {WALLET_SALT_LEN}\n")
         f.write(f"#define WALLET_NONCE_LEN {WALLET_NONCE_LEN}\n")
         f.write(f"#define WALLET_TAG_LEN {WALLET_TAG_LEN}\n")
+        f.write(f"#define WALLET_VERSION {WALLET_VERSION}\n")
+        f.write(f"#define WALLET_HEADER_LEN {WALLET_HEADER_LEN}\n")
         f.write(f"#define WALLET_ENTRY_LEN {WALLET_ENTRY_LEN}\n")
         f.write(f"#define WALLET_GROUPS {MAX_WALLET_GROUPS}\n")
         f.write(f"#define WALLET_CT_LEN {len(wallet_ct)}\n")
@@ -220,7 +239,8 @@ def secrets_to_c_header(
         _write_c_array(f, "wallet_nonce", wallet_nonce)
         _write_c_array(f, "wallet_ct", wallet_ct)
         _write_c_array(f, "wallet_tag", wallet_tag)
-        f.write("const static group_permission_t global_permissions[MAX_PERMS] = {\n")
+        f.write(f"#define NUM_PERMISSIONS {len(permissions)}\n")
+        f.write("const static group_permission_t global_permissions[NUM_PERMISSIONS] = {\n")
         for i, perm in enumerate(permissions):
             f.write(
                 (f"\t{{{hex(perm.group_id)}, {str(perm.read).lower()}, "
