@@ -17,6 +17,8 @@ import secrets
 from pathlib import Path
 
 from loguru import logger
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
 
 
 def gen_secrets(groups: list[int]) -> bytes:
@@ -34,17 +36,27 @@ def gen_secrets(groups: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
-    # Deployment-wide secret material. This stays in the secrets file and is
-    # wrapped per-board during firmware build.
-    global_secret = secrets.token_bytes(32)
-    magic_token = secrets.token_bytes(16)
-
-    # Create the secrets object. This file never ships on a device.
+    # Deployment-wide secrets for all groups. This file never ships on a device.
     secrets_data = {
-        "groups": groups,
-        "global_secret": global_secret.hex(),
-        "magic_token": magic_token.hex(),
+        "groups": {},
     }
+
+    for group_id in groups:
+        private_key = Ed25519PrivateKey.generate()
+        public_key = private_key.public_key()
+        secrets_data["groups"][f"{group_id:04x}"] = {
+            "k_transit": secrets.token_bytes(32).hex(),
+            "k_storage": secrets.token_bytes(32).hex(),
+            "ed25519_priv": private_key.private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption(),
+            ).hex(),
+            "ed25519_pub": public_key.public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            ).hex(),
+        }
 
     # NOTE: if you choose to use JSON for your file type, you will not
     # be able to store binary data, and must either use a different file
@@ -85,16 +97,12 @@ def main():
     # Parse the command line arguments
     args = parse_args()
 
-    secrets = gen_secrets(args.groups)
-
-    # Print the generated secrets for your own debugging
-    # Attackers will NOT have access to the output of this, but feel free to remove
-    logger.debug(f"Generated secrets: {secrets}")
+    secrets_blob = gen_secrets(args.groups)
 
     # Open the file, erroring if the file exists unless the --force arg is provided
     with open(args.secrets_file, "wb" if args.force else "xb") as f:
         # Dump the secrets to the file
-        f.write(secrets)
+        f.write(secrets_blob)
 
     # For your own debugging. Feel free to remove
     logger.success(f"Wrote secrets to {str(args.secrets_file.absolute())}")
