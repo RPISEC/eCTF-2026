@@ -1,3 +1,8 @@
+## Build Instructions
+1. Clone the [WolfSSL](https://github.com/wolfSSL/wolfssl) crypto library to firmware/
+2. To build, follow the [Boot Reference](https://rules.ectf.mitre.org/2026/getting_started/boot_reference.html) for your operating system.
+
+
 ## Layout
 
 - `firmware/` - Source code to build the firmware
