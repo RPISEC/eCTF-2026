@@ -5,14 +5,14 @@
 #define CONCAT(x, y) CONCAT_INNER(x, y)
 
 #define IF(x) {                                 \
-    volatile CONCAT(result,__LINE__) = x;       \
-    CONCAT(result,__LINE__) = x;                \
-    CONCAT(result,__LINE__) = x;                \
-    if (CONCAT(result,__LINE__)) {              \
-        CONCAT(result,__LINE__) = x;            \
-        if (CONCAT(result,__LINE__)) {          \
-            CONCAT(result,__LINE__) = x;        \
-            if (CONCAT(result,__LINE__)) {      \
+    volatile CONCAT(result, __LINE__) = x;      \
+    CONCAT(result, __LINE__) = x;               \
+    CONCAT(result, __LINE__) = x;               \
+    if (CONCAT(result, __LINE__)) {             \
+        CONCAT(result, __LINE__) = x;           \
+        if (CONCAT(result, __LINE__)) {         \
+            CONCAT(result, __LINE__) = x;       \
+            if (CONCAT(result, __LINE__)) {     \
 
 #define ENDIF }                                 \
         }                                       \
@@ -20,10 +20,8 @@
 }
 
 #define JITTER do {                                                     \
-        volatile uint32_t CONCAT(val, __LINE__);                        \
-        trng_get_u32(&CONCAT(val, __LINE__));                           \
-        CONCAT(val, __LINE__) %= 42;                                    \
-        for (uint32_t CONCAT(i, __LINE__) = 0; CONCAT(i, __LINE__) < CONCAT(val, __LINE__); CONCAT(i, __LINE__)++, trng_get_u32(&CONCAT(val, __LINE__)), CONCAT(val, __LINE__) %= 42) { \
+        volatile uint32_t CONCAT(val, __LINE__) = trng_get_u32() % 42;  \
+        for (uint32_t CONCAT(i, __LINE__) = 0; CONCAT(i, __LINE__) < CONCAT(val, __LINE__); CONCAT(i, __LINE__)++, CONCAT(val, __LINE__) = trng_get_u32() % 42) { \
             volatile uint32_t CONCAT(a, __LINE__) = 1630895 * CONCAT(i, __LINE__); \
             volatile uint32_t CONCAT(b, __LINE__) = ((CONCAT(a, __LINE__) & 0xFFFF) << 16 ^ (CONCAT(a, __LINE__) & 0xFFFF0000)) | (CONCAT(a, __LINE__) & 0xFFFF0000 >> 16) | (CONCAT(a, __LINE__) & 0xFFFF); \
             goto CONCAT(LABLE3, __LINE__);                              \
