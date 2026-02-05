@@ -52,6 +52,7 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_SYSCTL_init();
     SYSCFG_DL_UART_0_init();
     SYSCFG_DL_UART_1_init();
+    SYSCFG_DL_TRNG_init();
 }
 
 SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
@@ -60,11 +61,13 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_GPIO_reset(GPIOB);
     DL_UART_Main_reset(UART_0_INST);
     DL_UART_Main_reset(UART_1_INST);
+    DL_TRNG_reset(TRNG);
 
     DL_GPIO_enablePower(GPIOA);
     DL_GPIO_enablePower(GPIOB);
     DL_UART_Main_enablePower(UART_0_INST);
     DL_UART_Main_enablePower(UART_1_INST);
+    DL_TRNG_enablePower(TRNG);
     delay_cycles(POWER_STARTUP_DELAY);
 }
 
@@ -165,5 +168,17 @@ SYSCONFIG_WEAK void SYSCFG_DL_UART_1_init(void)
 
 
     DL_UART_Main_enable(UART_1_INST);
+}
+
+SYSCONFIG_WEAK void SYSCFG_DL_TRNG_init(void)
+{
+    DL_TRNG_setClockDivider(TRNG, DL_TRNG_CLOCK_DIVIDE_2);
+
+    DL_TRNG_sendCommand(TRNG, DL_TRNG_CMD_NORM_FUNC);
+    while (!DL_TRNG_isCommandDone(TRNG))
+        ;
+    DL_TRNG_clearInterruptStatus(TRNG, DL_TRNG_INTERRUPT_CMD_DONE_EVENT);
+
+    DL_TRNG_setDecimationRate(TRNG, DL_TRNG_DECIMATION_RATE_8);
 }
 

@@ -27,6 +27,7 @@
 
 // TODO Remove this if we endup changing crypto
 #include "simple_crypto.h"
+#include "simple_trng.h"
 
 /**********************************************************
  ************************ GLOBALS *************************
@@ -47,6 +48,10 @@ static unsigned char uart_buf[MAX_MSG_SIZE];
 void init() {
     // Initialize all of the hardware components
     SYSCFG_DL_init();
+
+    if(!trng_init()) {
+        print_debug("trng init error");
+    }
 
     init_fs();
 }

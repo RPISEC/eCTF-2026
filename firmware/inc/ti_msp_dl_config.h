@@ -128,6 +128,16 @@ extern "C" {
 #define BUTTONS_S2_IOMUX                                         (IOMUX_PINCM63)
 
 
+/* Defines for TRNG */
+/*
+ * The TRNG interrupt is part of INT_GROUP1. Refer to the TRM for more details
+ * on interrupt grouping
+ */
+#define TRNG_INT_IRQN                                            (TRNG_INT_IRQn)
+#define TRNG_INT_IIDX                            (DL_INTERRUPT_GROUP1_IIDX_TRNG)
+
+
+
 /* clang-format on */
 
 void SYSCFG_DL_init(void);
@@ -137,6 +147,7 @@ void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_UART_0_init(void);
 void SYSCFG_DL_UART_1_init(void);
 
+void SYSCFG_DL_TRNG_init(void);
 
 
 #ifdef __cplusplus

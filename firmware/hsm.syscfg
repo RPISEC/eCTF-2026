@@ -13,6 +13,7 @@ const Board         = scripting.addModule("/ti/driverlib/Board");
 const GPIO          = scripting.addModule("/ti/driverlib/GPIO", {}, false);
 const GPIO1         = GPIO.addInstance();
 const GPIO2         = GPIO.addInstance();
+const TRNG          = scripting.addModule("/ti/driverlib/TRNG");
 const UART          = scripting.addModule("/ti/driverlib/UART", {}, false);
 const UART1         = UART.addInstance();
 const UART2         = UART.addInstance();
@@ -37,13 +38,13 @@ GPIO2.associatedPins[0].pin.$assign      = "PB21";
 
 const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL", {}, false);
 
+TRNG.decimationRate = "DL_TRNG_DECIMATION_RATE_8";
+
 UART1.$name                    = "UART_0";
 UART1.targetBaudRate           = 115200;
 UART1.rxFifoThreshold          = "DL_UART_RX_FIFO_LEVEL_ONE_ENTRY";
 UART1.enableDMARX              = false;
 UART1.enableDMATX              = false;
-UART1.enableInternalLoopback   = false;
-UART1.enableFIFO               = false;
 UART1.peripheral.$assign       = "UART0";
 UART1.peripheral.rxPin.$assign = "PA11";
 UART1.peripheral.txPin.$assign = "PA10";
