@@ -38,24 +38,49 @@ def gen_secrets(groups: list[int]) -> bytes:
     """
     # Deployment-wide secrets for all groups. This file never ships on a device.
     secrets_data = {
+        "format": "ectf26-global-secrets",
         "groups": {},
     }
 
     for group_id in groups:
-        private_key = Ed25519PrivateKey.generate()
-        public_key = private_key.public_key()
+        c_private = Ed25519PrivateKey.generate()
+        c_public = c_private.public_key()
+        w_private = Ed25519PrivateKey.generate()
+        w_public = w_private.public_key()
+        k_storage = secrets.token_bytes(32)
+
+        c_priv_raw = c_private.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        c_pub_raw = c_public.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        w_priv_raw = w_private.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        w_pub_raw = w_public.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+        if len(k_storage) != 32:
+            raise ValueError("k_storage must be 32 bytes")
+        if len(c_priv_raw) != 32 or len(c_pub_raw) != 32:
+            raise ValueError("c_* Ed25519 keys must be 32 bytes")
+        if len(w_priv_raw) != 32 or len(w_pub_raw) != 32:
+            raise ValueError("w_* Ed25519 keys must be 32 bytes")
+
         secrets_data["groups"][f"{group_id:04x}"] = {
-            "k_transit": secrets.token_bytes(32).hex(),
-            "k_storage": secrets.token_bytes(32).hex(),
-            "ed25519_priv": private_key.private_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PrivateFormat.Raw,
-                encryption_algorithm=serialization.NoEncryption(),
-            ).hex(),
-            "ed25519_pub": public_key.public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw,
-            ).hex(),
+            "k_storage": k_storage.hex(),
+            "c_priv": c_priv_raw.hex(),
+            "c_pub": c_pub_raw.hex(),
+            "w_priv": w_priv_raw.hex(),
+            "w_pub": w_pub_raw.hex(),
         }
 
     # NOTE: if you choose to use JSON for your file type, you will not
