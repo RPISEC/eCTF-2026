@@ -19,20 +19,21 @@ import re
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-NUM_GROUPS = 8
+MAX_NUM_GROUPS = 8
 PERM_R = 0x01
 PERM_W = 0x02
 PERM_C = 0x04
 
 KEY32_LEN = 32
+CLEAR_NUM_GROUPS_LEN = 1
 PIN_SALT_LEN = 16
 WALLET_SALT_LEN = 16
 WALLET_IV_LEN = 12
 WALLET_TAG_LEN = 16
 WALLET_ITERS = 100000
 
-CLEAR_WALLET_LEN = (NUM_GROUPS * 2) + NUM_GROUPS + (NUM_GROUPS * KEY32_LEN) + (NUM_GROUPS * KEY32_LEN)
-KEYSTORE_LEN = (NUM_GROUPS * KEY32_LEN) * 3
+CLEAR_WALLET_LEN = CLEAR_NUM_GROUPS_LEN + (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY32_LEN) + (MAX_NUM_GROUPS * KEY32_LEN)
+KEYSTORE_LEN = (MAX_NUM_GROUPS * KEY32_LEN) * 3
 WALLET_CT_LEN = KEYSTORE_LEN
 WALLET_FLASH_LEN = CLEAR_WALLET_LEN + WALLET_SALT_LEN + WALLET_IV_LEN + WALLET_CT_LEN + WALLET_TAG_LEN
 
@@ -41,8 +42,8 @@ def _parse_permissions(perm_string):
     if not perm_string:
         raise ValueError("PERMISSIONS must be provided.")
     entries = perm_string.split(":")
-    if len(entries) > NUM_GROUPS:
-        raise ValueError(f"Too many permissions entries (max {NUM_GROUPS}).")
+    if len(entries) > MAX_NUM_GROUPS:
+        raise ValueError(f"Too many permissions entries (max {MAX_NUM_GROUPS}).")
 
     parsed = []
     for entry in entries:
@@ -100,10 +101,10 @@ def _decode_required(entry, field_name, group_key):
 
 
 def _build_clear_wallet(permission_entries, groups_payload):
-    group_ids = [0] * NUM_GROUPS
-    perms = [0] * NUM_GROUPS
-    w_pub = [bytes(KEY32_LEN) for _ in range(NUM_GROUPS)]
-    c_pub = [bytes(KEY32_LEN) for _ in range(NUM_GROUPS)]
+    group_ids = [0] * MAX_NUM_GROUPS
+    perms = [0] * MAX_NUM_GROUPS
+    w_pub = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
+    c_pub = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
 
     for idx, entry in enumerate(permission_entries):
         group_key = entry["group_key"]
@@ -117,6 +118,9 @@ def _build_clear_wallet(permission_entries, groups_payload):
         c_pub[idx] = _decode_required(group_data, "c_pub", group_key)
 
     clear_bytes = bytearray()
+    # clear_wallet_t layout:
+    # [num_groups:u8][group_id[MAX_NUM_GROUPS]:u16 LE][perms[MAX_NUM_GROUPS]:u8][w_pub][c_pub]
+    clear_bytes.append(len(permission_entries))
     for group_id in group_ids:
         clear_bytes.extend(group_id.to_bytes(2, "little"))
     clear_bytes.extend(bytes(perms))
@@ -131,9 +135,9 @@ def _build_clear_wallet(permission_entries, groups_payload):
 
 
 def _build_keystore(permission_entries, groups_payload):
-    k_storage = [bytes(KEY32_LEN) for _ in range(NUM_GROUPS)]
-    w_priv = [bytes(KEY32_LEN) for _ in range(NUM_GROUPS)]
-    c_priv = [bytes(KEY32_LEN) for _ in range(NUM_GROUPS)]
+    k_storage = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
+    w_priv = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
+    c_priv = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
 
     for idx, entry in enumerate(permission_entries):
         group_key = entry["group_key"]
@@ -200,8 +204,10 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
 
     with open(os.path.join(path, "secrets.h"), "w") as f:
         f.write("#pragma once\n")
-        f.write("#include <stdint.h>\n\n")
-        f.write(f"#define NUM_GROUPS {NUM_GROUPS}\n")
+        f.write("#include <stdint.h>\n")
+        f.write('#include "security.h"\n\n')
+        f.write(f"#define MAX_NUM_GROUPS {MAX_NUM_GROUPS}\n")
+        f.write(f"#define CLEAR_NUM_GROUPS_LEN {CLEAR_NUM_GROUPS_LEN}\n")
         f.write(f"#define WALLET_SALT_LEN {WALLET_SALT_LEN}\n")
         f.write(f"#define WALLET_IV_LEN {WALLET_IV_LEN}\n")
         f.write(f"#define WALLET_TAG_LEN {WALLET_TAG_LEN}\n")
@@ -211,6 +217,16 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
         f.write(f"#define WALLET_CT_LEN {WALLET_CT_LEN}\n")
         f.write(f"#define WALLET_FLASH_LEN {WALLET_FLASH_LEN}\n\n")
         _write_c_array(f, "wallet_flash", wallet_flash)
+        f.write("\n")
+        f.write("const static group_permission_t global_permissions[MAX_PERMS] = {\n")
+        for entry in permission_entries:
+            group_id = entry["group_id"]
+            perms = entry["perms"]
+            read_flag = "true" if (perms & PERM_R) else "false"
+            write_flag = "true" if (perms & PERM_W) else "false"
+            receive_flag = "true" if (perms & PERM_C) else "false"
+            f.write(f"    {{{hex(group_id)}, {read_flag}, {write_flag}, {receive_flag}}},\n")
+        f.write("};\n")
 
 
 def _parse_args():
