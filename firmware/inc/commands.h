@@ -159,4 +159,6 @@ int interrogate(uint16_t pkt_len, uint8_t *buf);
 */
 int listen(uint16_t pkt_len, uint8_t *buf);
 
+int bench(uint16_t pkt_len, uint8_t *buf);
+
 #endif // __COMMANDS_H__

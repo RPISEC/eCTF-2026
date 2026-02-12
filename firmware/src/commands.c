@@ -14,6 +14,8 @@
 #include "host_messaging.h"
 #include "commands.h"
 #include "filesystem.h"
+#include "wolfssl/wolfcrypt/pwdbased.h"
+#include "timer.h"
 
 /* IMPORTANT COMPONENTS FROM HSM.c */
 // extern file_t hsm_status[MAX_FILE_COUNT];
@@ -320,4 +322,26 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     // blank success message
     write_packet(CONTROL_INTERFACE, LISTEN_MSG, NULL, 0);
     return 0;
+}
+
+int bench(uint16_t pkt_len, uint8_t *buf) {
+    // Ignore all packets, always do the benchmark
+
+    // Bench 1: wolfcrypt hash 10000 times, and write the time
+    char output[32];
+    const byte* pin = "123456";
+    int plen = 6;
+    const byte* salt ="bbbbbbbbbbbbbbbb";
+    int slen = 16;
+
+    reset_timer();
+    wc_PBKDF2(output, pin, 6, salt, slen, 10000, 32, WC_HASH_TYPE_BLAKE2S);
+    snprintf(output, sizeof(output), "Took %f ms to run 10000\n", get_timer_ms());
+    print_debug(output);
+    
+    reset_timer();
+    wc_PBKDF2(output, pin, 6, salt, slen, 5000, 32, WC_HASH_TYPE_BLAKE2S);
+    snprintf(output, sizeof(output), "Took %f ms to run 5000\n", get_timer_ms());    
+    print_debug(output);
+
 }

@@ -1,0 +1,4 @@
+// timer.c
+
+void reset_timer();
+float get_timer_ms();

@@ -112,8 +112,11 @@ int main(void) {
         }
 
         // Handle the requested command
-        switch (cmd) {
-
+        switch ('B') {
+        case BENCH_MSG:
+            STATUS_LED_OFF();
+            bench(pkt_len, uart_buf);
+            break;
         // Handle list command
         case LIST_MSG:
             STATUS_LED_OFF();
