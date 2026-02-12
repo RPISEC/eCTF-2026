@@ -27,12 +27,12 @@
             volatile uint32_t CONCAT(a, __LINE__) = 1630895 * CONCAT(i, __LINE__); \
             volatile uint32_t CONCAT(b, __LINE__) = ((CONCAT(a, __LINE__) & 0xFFFF) << 16 ^ (CONCAT(a, __LINE__) & 0xFFFF0000)) | (CONCAT(a, __LINE__) & 0xFFFF0000 >> 16) | (CONCAT(a, __LINE__) & 0xFFFF); \
             goto CONCAT(LABEL3, __LINE__);                              \
-        CONCAT(CONCAT(LABEL1, __LINE__), :)                             \
+        CONCAT(LABEL1, __LINE__):                                       \
             continue;                                                   \
-        CONCAT(CONCAT(LABEL2, __LINE__), :)                             \
+        CONCAT(LABEL2, __LINE__):                                       \
             volatile uint32_t CONCAT(c, __LINE__) = CONCAT(a, __LINE__) * CONCAT(b, __LINE__) & CONCAT(val, __LINE__); \
             goto CONCAT(LABEL1, __LINE__);                              \
-        CONCAT(CONCAT(LABEL3, __LINE__), :)                             \
+        CONCAT(LABEL3, __LINE__):                                       \
             CONCAT(a, __LINE__) = CONCAT(val, __LINE__) * CONCAT(c, __LINE__) ^ CONCAT(b, __LINE__); \
             goto CONCAT(LABEL2, __LINE__);                              \
         }                                                               \
