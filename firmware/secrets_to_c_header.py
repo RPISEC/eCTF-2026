@@ -25,13 +25,12 @@ PERM_W = 0x02
 PERM_C = 0x04
 
 KEY32_LEN = 32
-CLEAR_NUM_GROUPS_LEN = 1
 PIN_SALT_LEN = 16
 KS_IV_LEN = 12
 KS_TAG_LEN = 16
 WALLET_ITERS = 100000
 
-CLEAR_STORAGE_LEN = CLEAR_NUM_GROUPS_LEN + (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY32_LEN) + (MAX_NUM_GROUPS * KEY32_LEN)
+CLEAR_STORAGE_LEN = (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY32_LEN) + (MAX_NUM_GROUPS * KEY32_LEN)
 KEYSTORE_LEN = (MAX_NUM_GROUPS * KEY32_LEN) * 3
 KS_CT_LEN = KEYSTORE_LEN
 WALLET_FLASH_LEN = CLEAR_STORAGE_LEN + PIN_SALT_LEN + KS_IV_LEN + KS_CT_LEN + KS_TAG_LEN
@@ -118,8 +117,7 @@ def _build_clear_storage(permission_entries, groups_payload):
 
     clear_bytes = bytearray()
     # clear_storage layout:
-    # [num_groups:u8][group_id[MAX_NUM_GROUPS]:u16 LE][perms[MAX_NUM_GROUPS]:u8][w_pub][c_pub]
-    clear_bytes.append(len(permission_entries))
+    # [group_id[MAX_NUM_GROUPS]:u16 LE][perms[MAX_NUM_GROUPS]:u8][w_pub][c_pub]
     for group_id in group_ids:
         clear_bytes.extend(group_id.to_bytes(2, "little"))
     clear_bytes.extend(bytes(perms))
@@ -206,7 +204,7 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
         f.write("#include <stdint.h>\n")
         f.write('#include "security.h"\n\n')
         f.write(f"#define MAX_NUM_GROUPS {MAX_NUM_GROUPS}\n")
-        f.write(f"#define CLEAR_NUM_GROUPS_LEN {CLEAR_NUM_GROUPS_LEN}\n")
+        f.write(f"#define PROVISIONED_NUM_GROUPS {len(permission_entries)}\n")
         f.write(f"#define PIN_SALT_LEN {PIN_SALT_LEN}\n")
         f.write(f"#define KS_IV_LEN {KS_IV_LEN}\n")
         f.write(f"#define KS_TAG_LEN {KS_TAG_LEN}\n")
