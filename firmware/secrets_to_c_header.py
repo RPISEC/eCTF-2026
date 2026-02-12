@@ -27,15 +27,14 @@ PERM_C = 0x04
 KEY32_LEN = 32
 CLEAR_NUM_GROUPS_LEN = 1
 PIN_SALT_LEN = 16
-WALLET_SALT_LEN = 16
-WALLET_IV_LEN = 12
-WALLET_TAG_LEN = 16
+KS_IV_LEN = 12
+KS_TAG_LEN = 16
 WALLET_ITERS = 100000
 
-CLEAR_WALLET_LEN = CLEAR_NUM_GROUPS_LEN + (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY32_LEN) + (MAX_NUM_GROUPS * KEY32_LEN)
+CLEAR_STORAGE_LEN = CLEAR_NUM_GROUPS_LEN + (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY32_LEN) + (MAX_NUM_GROUPS * KEY32_LEN)
 KEYSTORE_LEN = (MAX_NUM_GROUPS * KEY32_LEN) * 3
-WALLET_CT_LEN = KEYSTORE_LEN
-WALLET_FLASH_LEN = CLEAR_WALLET_LEN + WALLET_SALT_LEN + WALLET_IV_LEN + WALLET_CT_LEN + WALLET_TAG_LEN
+KS_CT_LEN = KEYSTORE_LEN
+WALLET_FLASH_LEN = CLEAR_STORAGE_LEN + PIN_SALT_LEN + KS_IV_LEN + KS_CT_LEN + KS_TAG_LEN
 
 
 def _parse_permissions(perm_string):
@@ -100,7 +99,7 @@ def _decode_required(entry, field_name, group_key):
     return value
 
 
-def _build_clear_wallet(permission_entries, groups_payload):
+def _build_clear_storage(permission_entries, groups_payload):
     group_ids = [0] * MAX_NUM_GROUPS
     perms = [0] * MAX_NUM_GROUPS
     w_pub = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
@@ -118,7 +117,7 @@ def _build_clear_wallet(permission_entries, groups_payload):
         c_pub[idx] = _decode_required(group_data, "c_pub", group_key)
 
     clear_bytes = bytearray()
-    # clear_wallet_t layout:
+    # clear_storage layout:
     # [num_groups:u8][group_id[MAX_NUM_GROUPS]:u16 LE][perms[MAX_NUM_GROUPS]:u8][w_pub][c_pub]
     clear_bytes.append(len(permission_entries))
     for group_id in group_ids:
@@ -129,8 +128,8 @@ def _build_clear_wallet(permission_entries, groups_payload):
     for key in c_pub:
         clear_bytes.extend(key)
 
-    if len(clear_bytes) != CLEAR_WALLET_LEN:
-        raise ValueError("Clear wallet length mismatch.")
+    if len(clear_bytes) != CLEAR_STORAGE_LEN:
+        raise ValueError("Clear storage length mismatch.")
     return bytes(clear_bytes)
 
 
@@ -153,17 +152,17 @@ def _build_keystore(permission_entries, groups_payload):
         if perms & PERM_C:
             c_priv[idx] = _decode_required(group_data, "c_priv", group_key)
 
-    keystore_bytes = bytearray()
+    keystore = bytearray()
     for key in k_storage:
-        keystore_bytes.extend(key)
+        keystore.extend(key)
     for key in w_priv:
-        keystore_bytes.extend(key)
+        keystore.extend(key)
     for key in c_priv:
-        keystore_bytes.extend(key)
+        keystore.extend(key)
 
-    if len(keystore_bytes) != KEYSTORE_LEN:
+    if len(keystore) != KEYSTORE_LEN:
         raise ValueError("Keystore length mismatch.")
-    return bytes(keystore_bytes)
+    return bytes(keystore)
 
 
 def _write_c_array(f, name, data, columns=12):
@@ -181,24 +180,24 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
     permission_entries = _parse_permissions(permissions)
     groups_payload = _load_payload(secrets_blob)
 
-    clear_bytes = _build_clear_wallet(permission_entries, groups_payload)
-    keystore_bytes = _build_keystore(permission_entries, groups_payload)
+    clear_storage = _build_clear_storage(permission_entries, groups_payload)
+    keystore = _build_keystore(permission_entries, groups_payload)
 
-    wallet_salt = os.urandom(WALLET_SALT_LEN)
-    wallet_iv = os.urandom(WALLET_IV_LEN)
+    pin_salt = os.urandom(PIN_SALT_LEN)
+    ks_iv = os.urandom(KS_IV_LEN)
     pin_bytes = hsm_pin.encode("ascii")
-    wallet_key = hashlib.pbkdf2_hmac("sha256", pin_bytes, wallet_salt, WALLET_ITERS, dklen=KEY32_LEN)
+    pin_hash = hashlib.pbkdf2_hmac("sha256", pin_bytes, pin_salt, WALLET_ITERS, dklen=KEY32_LEN)
 
-    aesgcm = AESGCM(wallet_key)
-    ct_with_tag = aesgcm.encrypt(wallet_iv, keystore_bytes, clear_bytes)
-    wallet_ct = ct_with_tag[:-WALLET_TAG_LEN]
-    wallet_tag = ct_with_tag[-WALLET_TAG_LEN:]
+    aesgcm = AESGCM(pin_hash)
+    ct_with_tag = aesgcm.encrypt(ks_iv, keystore, clear_storage)
+    ks_ct = ct_with_tag[:-KS_TAG_LEN]
+    ks_tag = ct_with_tag[-KS_TAG_LEN:]
 
-    round_trip = aesgcm.decrypt(wallet_iv, ct_with_tag, clear_bytes)
-    if round_trip != keystore_bytes:
+    round_trip = aesgcm.decrypt(ks_iv, ct_with_tag, clear_storage)
+    if round_trip != keystore:
         raise ValueError("Wallet round-trip check failed.")
 
-    wallet_flash = clear_bytes + wallet_salt + wallet_iv + wallet_ct + wallet_tag
+    wallet_flash = clear_storage + pin_salt + ks_iv + ks_ct + ks_tag
     if len(wallet_flash) != WALLET_FLASH_LEN:
         raise ValueError("Wallet flash length mismatch.")
 
@@ -208,13 +207,13 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
         f.write('#include "security.h"\n\n')
         f.write(f"#define MAX_NUM_GROUPS {MAX_NUM_GROUPS}\n")
         f.write(f"#define CLEAR_NUM_GROUPS_LEN {CLEAR_NUM_GROUPS_LEN}\n")
-        f.write(f"#define WALLET_SALT_LEN {WALLET_SALT_LEN}\n")
-        f.write(f"#define WALLET_IV_LEN {WALLET_IV_LEN}\n")
-        f.write(f"#define WALLET_TAG_LEN {WALLET_TAG_LEN}\n")
+        f.write(f"#define PIN_SALT_LEN {PIN_SALT_LEN}\n")
+        f.write(f"#define KS_IV_LEN {KS_IV_LEN}\n")
+        f.write(f"#define KS_TAG_LEN {KS_TAG_LEN}\n")
         f.write(f"#define WALLET_ITERS {WALLET_ITERS}\n")
-        f.write(f"#define CLEAR_WALLET_LEN {CLEAR_WALLET_LEN}\n")
+        f.write(f"#define CLEAR_STORAGE_LEN {CLEAR_STORAGE_LEN}\n")
         f.write(f"#define KEYSTORE_LEN {KEYSTORE_LEN}\n")
-        f.write(f"#define WALLET_CT_LEN {WALLET_CT_LEN}\n")
+        f.write(f"#define KS_CT_LEN {KS_CT_LEN}\n")
         f.write(f"#define WALLET_FLASH_LEN {WALLET_FLASH_LEN}\n\n")
         _write_c_array(f, "wallet_flash", wallet_flash)
         f.write("\n")
