@@ -22,7 +22,8 @@ OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/security.so \
     $(BUILDDIR)/filesystem.so \
     $(BUILDDIR)/commands.so \
-    $(BUILDDIR)/simple_trng.so
+    $(BUILDDIR)/simple_trng.so \
+    $(BUILDDIR)/hardware_crypto.so \
 
 ifeq ($(CRYPTO_EXAMPLE), 1)
 OBJECTS += $(BUILDDIR)/simple_crypto.so
@@ -42,6 +43,9 @@ CFLAGS += -DNO_FILESYSTEM
 CFLAGS += -DNO_DEV_RANDOM
 CFLAGS += -DWC_NO_DEFAULT_DEVID
 CFLAGS += -DWOLF_CRYPTO_CB
+CFLAGS += -DWOLFCRYPT_ONLY # we only need the wolfcrypt library, not all of wolfssl
+CFLAGS += -DHAVE_AESGCM
+CFLAGS += -DMAX_CRYPTO_DEVID_CALLBACKS=2  # one for the trng and one for the hardware crypto accelerator
 
 WOLFSSL_INC = wolfssl/wolfcrypt/src
 CFLAGS += -I./wolfssl
@@ -49,6 +53,9 @@ CFLAGS += -I./wolfssl
 # we need to build these objects for the simple crypto example
 OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/hash.o
 OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/cryptocb.o
+# needed for initializing wolfcrypt
+OBJECTS += $(WOLFSSL_INC)/wc_port.o
+
 endif
 
 NAME = hsm
