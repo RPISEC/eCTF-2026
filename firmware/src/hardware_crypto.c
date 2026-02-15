@@ -226,7 +226,10 @@ int callbackHardwareCrypto(int devId, wc_CryptoInfo* info, void* ctx) {
         // copy results back to wolfcrypt
         XMEMCPY(params.out, _hc_aes_output.arr, params.sz);
 
-        // cleanup
+        // cleanup (zero out buffers as they may contain sensitive data)
+        XMEMSET(_hc_aes_aad_input.arr, 0, _hc_aes_aad_input.length * sizeof(uint32_t));
+        XMEMSET(_hc_aes_input.arr, 0, _hc_aes_input.length * sizeof(uint32_t));
+        XMEMSET(_hc_aes_output.arr, 0, _hc_aes_output.length * sizeof(uint32_t));
         free((void*)_hc_aes_aad_input.arr);
         free((void*)_hc_aes_input.arr);
         free((void*)_hc_aes_output.arr);
