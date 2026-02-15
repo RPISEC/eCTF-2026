@@ -200,9 +200,9 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
         raise ValueError("Wallet flash length mismatch.")
 
     with open(os.path.join(path, "secrets.h"), "w") as f:
-        f.write("#pragma once\n")
+        f.write("#ifndef __SECRETS__\n")
+        f.write("#define __SECRETS__\n")
         f.write("#include <stdint.h>\n")
-        f.write('#include "security.h"\n\n')
         f.write(f"#define MAX_NUM_GROUPS {MAX_NUM_GROUPS}\n")
         f.write(f"#define PROVISIONED_NUM_GROUPS {len(permission_entries)}\n")
         f.write(f"#define PIN_SALT_LEN {PIN_SALT_LEN}\n")
@@ -214,16 +214,8 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
         f.write(f"#define KS_CT_LEN {KS_CT_LEN}\n")
         f.write(f"#define WALLET_FLASH_LEN {WALLET_FLASH_LEN}\n\n")
         _write_c_array(f, "wallet_flash", wallet_flash)
+        f.write("\n#endif  // __SECRETS__\n")
         f.write("\n")
-        f.write("const static group_permission_t global_permissions[MAX_PERMS] = {\n")
-        for entry in permission_entries:
-            group_id = entry["group_id"]
-            perms = entry["perms"]
-            read_flag = "true" if (perms & PERM_R) else "false"
-            write_flag = "true" if (perms & PERM_W) else "false"
-            receive_flag = "true" if (perms & PERM_C) else "false"
-            f.write(f"    {{{hex(group_id)}, {read_flag}, {write_flag}, {receive_flag}}},\n")
-        f.write("};\n")
 
 
 def _parse_args():
