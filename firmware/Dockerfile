@@ -14,6 +14,8 @@ WORKDIR /root
 # do this first because it takes the longest
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     python3 \
+    python3-pip \
+    python3-cryptography \
     make \
     wget \
     build-essential \
@@ -42,4 +44,3 @@ RUN if [ $(uname -m) = "x86_64" ]; then \
 WORKDIR /hsm
 
 ENTRYPOINT ["bash", "/hsm/build.sh"]
-

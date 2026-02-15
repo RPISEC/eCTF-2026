@@ -42,6 +42,7 @@ CFLAGS += -DNO_FILESYSTEM
 CFLAGS += -DNO_DEV_RANDOM
 CFLAGS += -DWC_NO_DEFAULT_DEVID
 CFLAGS += -DWOLF_CRYPTO_CB
+CFLAGS += -DWOLFSSL_SMALL_STACK
 
 WOLFSSL_INC = wolfssl/wolfcrypt/src
 CFLAGS += -I./wolfssl
@@ -49,6 +50,9 @@ CFLAGS += -I./wolfssl
 # we need to build these objects for the simple crypto example
 OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/hash.o
 OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/cryptocb.o
+OBJECTS += $(WOLFSSL_INC)/sha256.o $(WOLFSSL_INC)/hmac.o
+OBJECTS += $(WOLFSSL_INC)/pwdbased.o $(WOLFSSL_INC)/memory.o
+OBJECTS += $(WOLFSSL_INC)/misc.o
 endif
 
 NAME = hsm

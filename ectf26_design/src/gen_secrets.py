@@ -1,6 +1,7 @@
 """
 Author: Ben Janis
 Date: 2026
+Modified By: Jaden
 
 This source file is part of an example system for MITRE's 2026 Embedded CTF
 (eCTF). This code is being provided only for educational purposes for the 2026 MITRE
@@ -12,9 +13,12 @@ Copyright: Copyright (c) 2026 The MITRE Corporation
 
 import argparse
 import json
+import secrets
 from pathlib import Path
 
 from loguru import logger
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
 
 
 def gen_secrets(groups: list[int]) -> bytes:
@@ -32,22 +36,58 @@ def gen_secrets(groups: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
-    # TODO: Update this function to generate any system-wide secrets needed by
-    #   your design
-
-    # Create the secrets object
-    # You can change this to generate any secret material
-    # The secrets file will never be shared with attackers
-    secrets = {
-        "groups": groups,
-        "some_secrets": "EXAMPLE",
+    # Deployment-wide secrets for all groups. This file never ships on a device.
+    secrets_data = {
+        "format": "ectf26-global-secrets",
+        "groups": {},
     }
+
+    for group_id in groups:
+        c_private = Ed25519PrivateKey.generate()
+        c_public = c_private.public_key()
+        w_private = Ed25519PrivateKey.generate()
+        w_public = w_private.public_key()
+        k_storage = secrets.token_bytes(32)
+
+        c_priv_raw = c_private.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        c_pub_raw = c_public.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        w_priv_raw = w_private.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        w_pub_raw = w_public.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+        if len(k_storage) != 32:
+            raise ValueError("k_storage must be 32 bytes")
+        if len(c_priv_raw) != 32 or len(c_pub_raw) != 32:
+            raise ValueError("c_* Ed25519 keys must be 32 bytes")
+        if len(w_priv_raw) != 32 or len(w_pub_raw) != 32:
+            raise ValueError("w_* Ed25519 keys must be 32 bytes")
+
+        secrets_data["groups"][f"{group_id:04x}"] = {
+            "k_storage": k_storage.hex(),
+            "c_priv": c_priv_raw.hex(),
+            "c_pub": c_pub_raw.hex(),
+            "w_priv": w_priv_raw.hex(),
+            "w_pub": w_pub_raw.hex(),
+        }
 
     # NOTE: if you choose to use JSON for your file type, you will not
     # be able to store binary data, and must either use a different file
     # type or encode the binary data to hex, base64, or another type of
     # ASCII-only encoding
-    return json.dumps(secrets).encode()
+    return json.dumps(secrets_data).encode()
 
 
 def parse_args():
@@ -82,18 +122,12 @@ def main():
     # Parse the command line arguments
     args = parse_args()
 
-    secrets = gen_secrets(args.groups)
-
-    # Print the generated secrets for your own debugging
-    # Attackers will NOT have access to the output of this, but feel free to remove
-    #
-    # NOTE: Printing sensitive data is generally not good security practice
-    logger.debug(f"Generated secrets: {secrets}")
+    secrets_blob = gen_secrets(args.groups)
 
     # Open the file, erroring if the file exists unless the --force arg is provided
     with open(args.secrets_file, "wb" if args.force else "xb") as f:
         # Dump the secrets to the file
-        f.write(secrets)
+        f.write(secrets_blob)
 
     # For your own debugging. Feel free to remove
     logger.success(f"Wrote secrets to {str(args.secrets_file.absolute())}")
