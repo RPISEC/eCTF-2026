@@ -1,5 +1,5 @@
-#ifndef AES_TEST_H
-#define AES_TEST_H
+#ifndef __AES_TEST__
+#define __AES_TEST__
 int test_aes_gcm(void);
 int test_aes_gcm_errors(void);
-#endif // AES_TEST_H
+#endif // __AES_TEST__

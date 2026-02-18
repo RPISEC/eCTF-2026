@@ -8,11 +8,11 @@
     wc_AesGcmSetKey(&aes, YOUR_KEY, sizeof(YOUR_KEY));
     ret = wc_AesGcmEncrypt(
         &aes,
-        ciphertext,                     // out        
-        TEST_PLAINTEXT, TEST_PT_SZ,     // in, sz     
-        TEST_IV,        sizeof(TEST_IV),// iv, ivSz   
-        auth_tag,       AUTH_TAG_SZ,    // tag, tagSz 
-        TEST_AAD,       TEST_AAD_SZ     // aad, aadSz 
+        ciphertext,                     // out
+        TEST_PLAINTEXT, TEST_PT_SZ,     // in, sz
+        TEST_IV,        sizeof(TEST_IV),// iv, ivSz
+        auth_tag,       AUTH_TAG_SZ,    // tag, tagSz
+        TEST_AAD,       TEST_AAD_SZ     // aad, aadSz
     );
     if (ret != 0) {
         print_debug("Encrypt failed\n");
@@ -22,7 +22,9 @@
 */
 
 // config for hardware interface
-#include "ti_msp_dl_config.h"
+#include <ti/devices/msp/msp.h>
+#include <ti/driverlib/driverlib.h>
+#include <ti/driverlib/m0p/dl_core.h>
 
 // wolfcrypt library includes
 #include <wolfssl/wolfcrypt/settings.h>
@@ -49,21 +51,21 @@ static DL_AESADV_Config _hc_AESADV_config = {
 };
 
 typedef struct {
-    volatile uint32_t * arr;
-    volatile uint32_t length;
+    uint32_t * arr;
+    uint32_t length;
 } Buffer_uint32;
 
 // state flags for AES engine
-volatile uint32_t _hc_operation_in_progress = false;
-volatile uint32_t _hc_aad_flag = 0;
+static uint32_t _hc_operation_in_progress = false;
+static uint32_t _hc_aad_flag = 0;
 
 // global state for interrupt handler
-volatile Buffer_uint32 _hc_aes_aad_input = {NULL, 0};
-volatile Buffer_uint32 _hc_aes_input = {NULL, 0};
-volatile Buffer_uint32 _hc_aes_output = {NULL, 0};
-volatile uint32_t _hc_aes_tag[AES_AUTH_TAG_SIZE/sizeof(uint32_t)];
-volatile uint32_t _hc_input_idx = 0;
-volatile uint32_t _hc_output_idx = 0;
+static Buffer_uint32 _hc_aes_aad_input = {NULL, 0};
+static Buffer_uint32 _hc_aes_input = {NULL, 0};
+static Buffer_uint32 _hc_aes_output = {NULL, 0};
+static uint32_t _hc_aes_tag[AES_AUTH_TAG_SIZE/sizeof(uint32_t)];
+static uint32_t _hc_input_idx = 0;
+static uint32_t _hc_output_idx = 0;
 
 /**
  * Note: wolfcrypt uses very similar struct definitions for wc_CryptoCb_AesAuthEnc and wc_CryptoCb_AesAuthDec
@@ -80,7 +82,7 @@ typedef struct {
     word32         ivSz;
     const uint8_t* authIn;
     word32         authInSz;
-    uint8_t*       authTag; 
+    uint8_t*       authTag;
     word32         authTagSz;
     int            enc;          /* DIR_ENCRYPT or DIR_DECRYPT */
 } HC_AesGcmParams;
@@ -138,122 +140,123 @@ int init_hardware_crypto(void) {
  * For all other operations: return CRYPTOCB_UNAVAILABLE to fall back to wolfcrypt software implementation.
  */
 int callbackHardwareCrypto(int devId, wc_CryptoInfo* info, void* ctx) {
-    
-    if (info->algo_type == WC_ALGO_TYPE_CIPHER && info->cipher.type == WC_CIPHER_AES_GCM) {
 
-        Aes* aes;
-        HC_AesGcmParams params;
-        extract_aesgcm_params(info, &params);
-        int direction;
-
-        // reset flags
-        _hc_input_idx = 0;
-        _hc_output_idx = 0;
-        _hc_aad_flag = 0;
-
-        if (info->cipher.enc == DIR_ENCRYPT) {
-            aes = info->cipher.aesgcm_enc.aes;
-            direction = DL_AESADV_DIR_ENCRYPT;
-        } else {
-            aes = info->cipher.aesgcm_dec.aes;
-            direction = DL_AESADV_DIR_DECRYPT;
-        }
-
-        // make sure we are using the right key size
-        // support only 32 byte keys to avoid mistakingly using a smaller key
-        if (aes->keylen != 32) {
-            return BAD_FUNC_ARG;
-        }
-        // load key into AES engine
-        DL_AESADV_setKeySize(AESADV, DL_AESADV_KEY_SIZE_256_BIT);
-        DL_AESADV_setKeyAligned(AESADV, aes->key, DL_AESADV_KEY_SIZE_256_BIT);
-
-        // set config before initializing AES engine
-        _hc_AESADV_config.direction = direction;
-        _hc_AESADV_config.iv = (uint8_t *)params.iv;
-        _hc_AESADV_config.nonce = NULL;
-        _hc_AESADV_config.lowerCryptoLength = params.sz & 0xFFFFFFFF;
-        _hc_AESADV_config.upperCryptoLength = 0; // not supporting content sizes of more than 4GB for simplicity
-        _hc_AESADV_config.aadLength = params.authInSz;
-
-        // write the AES context configuration
-        DL_AESADV_initGCM(AESADV, (DL_AESADV_Config *) &_hc_AESADV_config);
-
-
-        /* set global state for interrupt handler
-           Note: we cannot use the same buffers as wolfcrypt uses
-           since they are not guaranteed to by 4-byte aligned, which is required for the AES data load operations
-           so we allocate our own uint32_t buffers and copy data over to them
-           we use length to refer to number of items, not size in bytes, so length is rounded up from size to ensure we have enough space for the data
-        */
-        _hc_aes_aad_input.arr = malloc(params.authInSz);
-        _hc_aes_aad_input.length = (params.authInSz + sizeof(uint32_t) - 1) / sizeof(uint32_t);
-        _hc_aes_input.arr = malloc(params.sz);
-        _hc_aes_input.length = (params.sz + sizeof(uint32_t) - 1) / sizeof(uint32_t);
-        _hc_aes_output.arr = malloc(params.sz);
-        _hc_aes_output.length = _hc_aes_input.length; // same length as input
-        XMEMCPY(_hc_aes_aad_input.arr, params.authIn, params.authInSz);
-        XMEMCPY(_hc_aes_input.arr, params.in, params.sz);
-
-        // load aad
-        _hc_aad_flag = 1;
-        
-        DL_AESADV_clearInterruptStatus(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
-        DL_AESADV_enableInterrupt(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
-        while(_hc_input_idx < _hc_aes_aad_input.length){
-            __WFE();
-        }        
-
-        // reset flags
-        _hc_input_idx = 0;
-        _hc_output_idx = 0;
-        _hc_aad_flag = 0;
-
-        // load input data and enable each of the interrupts that can happen during the encryption/decryption operation
-        _hc_operation_in_progress = true;
-
-        DL_AESADV_clearInterruptStatus(AESADV,DL_AESADV_INTERRUPT_OUTPUT_READY);
-        DL_AESADV_enableInterrupt(AESADV,DL_AESADV_INTERRUPT_OUTPUT_READY);
-        DL_AESADV_clearInterruptStatus(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
-        DL_AESADV_enableInterrupt(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
-        DL_AESADV_clearInterruptStatus(AESADV,DL_AESADV_INTERRUPT_SAVED_OUTPUT_CONTEXT_READY);
-        DL_AESADV_enableInterrupt(AESADV,DL_AESADV_INTERRUPT_SAVED_OUTPUT_CONTEXT_READY);
-
-        while(_hc_operation_in_progress){
-            __WFE();
-        }
-
-        // copy results back to wolfcrypt
-        XMEMCPY(params.out, _hc_aes_output.arr, params.sz);
-
-        // cleanup (zero out buffers as they may contain sensitive data)
-        XMEMSET(_hc_aes_aad_input.arr, 0, _hc_aes_aad_input.length * sizeof(uint32_t));
-        XMEMSET(_hc_aes_input.arr, 0, _hc_aes_input.length * sizeof(uint32_t));
-        XMEMSET(_hc_aes_output.arr, 0, _hc_aes_output.length * sizeof(uint32_t));
-        free((void*)_hc_aes_aad_input.arr);
-        free((void*)_hc_aes_input.arr);
-        free((void*)_hc_aes_output.arr);
-
-        if (info->cipher.enc == DIR_ENCRYPT) {
-            // for encryption, copy the computed tag out to wolfcrypt
-            XMEMCPY(params.authTag, (void*)_hc_aes_tag, params.authTagSz);
-        } else {
-            /* for decryption, compare the hardware-computed tag against
-               the expected tag passed in by the caller.
-               If they don't match, the data was tampered with or the
-               wrong key/IV/AAD was used. Zero the output to prevent the
-               caller from using unauthenticated plaintext, then fail. */
-            if (XMEMCMP(params.authTag, (void*)_hc_aes_tag, params.authTagSz) != 0) {
-                XMEMSET(params.out, 0, params.sz);
-                return AES_GCM_AUTH_E;
-            }
-        }
-
-        // success
-        return 0;
-    }
     // Return CRYPTOCB_UNAVAILABLE to fall back to software implementation for different algorithms
-    return CRYPTOCB_UNAVAILABLE; 
+    if (info->algo_type != WC_ALGO_TYPE_CIPHER || info->cipher.type != WC_CIPHER_AES_GCM) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    Aes* aes;
+    HC_AesGcmParams params;
+    extract_aesgcm_params(info, &params);
+    int direction;
+
+    // reset flags
+    _hc_input_idx = 0;
+    _hc_output_idx = 0;
+    _hc_aad_flag = 0;
+
+    if (info->cipher.enc == DIR_ENCRYPT) {
+        aes = info->cipher.aesgcm_enc.aes;
+        direction = DL_AESADV_DIR_ENCRYPT;
+    } else {
+        aes = info->cipher.aesgcm_dec.aes;
+        direction = DL_AESADV_DIR_DECRYPT;
+    }
+
+    // make sure we are using the right key size
+    // support only 32 byte keys to avoid mistakingly using a smaller key
+    if (aes->keylen != 32) {
+        return BAD_FUNC_ARG;
+    }
+
+    // load key into AES engine
+    DL_AESADV_setKeySize(AESADV, DL_AESADV_KEY_SIZE_256_BIT);
+    DL_AESADV_setKeyAligned(AESADV, aes->key, DL_AESADV_KEY_SIZE_256_BIT);
+
+    // set config before initializing AES engine
+    _hc_AESADV_config.direction = direction;
+    _hc_AESADV_config.iv = (uint8_t *)params.iv;
+    _hc_AESADV_config.nonce = NULL;
+    _hc_AESADV_config.lowerCryptoLength = params.sz & 0xFFFFFFFF;
+    _hc_AESADV_config.upperCryptoLength = 0; // not supporting content sizes of more than 4GB for simplicity
+    _hc_AESADV_config.aadLength = params.authInSz;
+
+    // write the AES context configuration
+    DL_AESADV_initGCM(AESADV, (DL_AESADV_Config *) &_hc_AESADV_config);
+
+
+    /* set global state for interrupt handler
+       Note: we cannot use the same buffers as wolfcrypt uses
+       since they are not guaranteed to by 4-byte aligned, which is required for the AES data load operations
+       so we allocate our own uint32_t buffers and copy data over to them
+       we use length to refer to number of items, not size in bytes, so length is rounded up from size to ensure we have enough space for the data
+    */
+    _hc_aes_aad_input.arr = malloc(params.authInSz);
+    _hc_aes_aad_input.length = (params.authInSz + sizeof(uint32_t) - 1) / sizeof(uint32_t);
+    _hc_aes_input.arr = malloc(params.sz);
+    _hc_aes_input.length = (params.sz + sizeof(uint32_t) - 1) / sizeof(uint32_t);
+    _hc_aes_output.arr = malloc(params.sz);
+    _hc_aes_output.length = _hc_aes_input.length; // same length as input
+    XMEMCPY(_hc_aes_aad_input.arr, params.authIn, params.authInSz);
+    XMEMCPY(_hc_aes_input.arr, params.in, params.sz);
+
+    // load aad
+    _hc_aad_flag = 1;
+
+    DL_AESADV_clearInterruptStatus(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
+    DL_AESADV_enableInterrupt(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
+    while(_hc_input_idx < _hc_aes_aad_input.length){
+        __WFE();
+    }
+
+    // reset flags
+    _hc_input_idx = 0;
+    _hc_output_idx = 0;
+    _hc_aad_flag = 0;
+
+    // load input data and enable each of the interrupts that can happen during the encryption/decryption operation
+    _hc_operation_in_progress = true;
+
+    DL_AESADV_clearInterruptStatus(AESADV,DL_AESADV_INTERRUPT_OUTPUT_READY);
+    DL_AESADV_enableInterrupt(AESADV,DL_AESADV_INTERRUPT_OUTPUT_READY);
+    DL_AESADV_clearInterruptStatus(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
+    DL_AESADV_enableInterrupt(AESADV, DL_AESADV_INTERRUPT_INPUT_READY);
+    DL_AESADV_clearInterruptStatus(AESADV,DL_AESADV_INTERRUPT_SAVED_OUTPUT_CONTEXT_READY);
+    DL_AESADV_enableInterrupt(AESADV,DL_AESADV_INTERRUPT_SAVED_OUTPUT_CONTEXT_READY);
+
+    while(_hc_operation_in_progress){
+        __WFE();
+    }
+
+    // copy results back to wolfcrypt
+    XMEMCPY(params.out, _hc_aes_output.arr, params.sz);
+
+    // cleanup (zero out buffers as they may contain sensitive data)
+    XMEMSET(_hc_aes_aad_input.arr, 0, _hc_aes_aad_input.length * sizeof(uint32_t));
+    XMEMSET(_hc_aes_input.arr, 0, _hc_aes_input.length * sizeof(uint32_t));
+    XMEMSET(_hc_aes_output.arr, 0, _hc_aes_output.length * sizeof(uint32_t));
+    free((void*)_hc_aes_aad_input.arr);
+    free((void*)_hc_aes_input.arr);
+    free((void*)_hc_aes_output.arr);
+
+    if (info->cipher.enc == DIR_ENCRYPT) {
+        // for encryption, copy the computed tag out to wolfcrypt
+        XMEMCPY(params.authTag, (void*)_hc_aes_tag, params.authTagSz);
+    } else {
+        /* for decryption, compare the hardware-computed tag against
+           the expected tag passed in by the caller.
+           If they don't match, the data was tampered with or the
+           wrong key/IV/AAD was used. Zero the output to prevent the
+           caller from using unauthenticated plaintext, then fail. */
+        if (XMEMCMP(params.authTag, (void*)_hc_aes_tag, params.authTagSz) != 0) {
+            XMEMSET(params.out, 0, params.sz);
+            return AES_GCM_AUTH_E;
+        }
+    }
+
+    // success
+    return 0;
 }
 
 /**
@@ -298,12 +301,12 @@ void AESADV_IRQHandler(void)
         case DL_AESADV_IIDX_SAVED_OUTPUT_CONTEXT_READY:
             // read output tag
             DL_AESADV_readTAGAligned(AESADV, _hc_aes_tag);
-            DL_AESADV_disableInterrupt(AESADV,DL_AESADV_INTERRUPT_SAVED_OUTPUT_CONTEXT_READY);
+            DL_AESADV_disableInterrupt(AESADV, DL_AESADV_INTERRUPT_SAVED_OUTPUT_CONTEXT_READY);
             // notify that operation is complete; once writing has finished
             _hc_operation_in_progress = false;
             break;
         default :
             break;
-        
+
     }
 }
