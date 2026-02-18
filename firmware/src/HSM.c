@@ -17,6 +17,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <wolfssl/wolfcrypt/wc_port.h>
+
 #include "simple_flash.h"
 #include "host_messaging.h"
 #include "commands.h"
@@ -24,10 +26,13 @@
 #include "ti_msp_dl_config.h"
 #include "status_led.h"
 #include "simple_uart.h"
-
-// TODO Remove this if we endup changing crypto
-#include "simple_crypto.h"
+#include "hardware_crypto.h"
 #include "simple_trng.h"
+
+#ifdef AES_TEST
+#include "aes_test.h"
+#endif
+
 
 /**********************************************************
  ************************ GLOBALS *************************
@@ -49,8 +54,16 @@ void init() {
     // Initialize all of the hardware components
     SYSCFG_DL_init();
 
+    // need to initialize wolfcrypt before initializing wolfcrypt-dependent components
+    wolfCrypt_Init();
+    print_debug("wolfCrypt initialized\n");
+
     if(!trng_init()) {
         print_debug("trng init error");
+    }
+
+    if (!init_hardware_crypto()) {
+        print_debug("hardware crypto init error");
     }
 
     init_fs();
@@ -104,6 +117,10 @@ int main(void) {
         // Handle list command
         case LIST_MSG:
             STATUS_LED_OFF();
+            #ifdef AES_TEST
+            test_aes_gcm();
+            test_aes_gcm_errors();
+            #endif // AES_TEST
             list(pkt_len, uart_buf);
             break;
 

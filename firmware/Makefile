@@ -9,9 +9,8 @@ BUILDDIR ?= /tmp/build
 VPATH = "src"
 LINKERFILE = "firmware.ld"
 
-# to download wolfssl for the simple crypto example, `cd ./firmware/ && git clone https://github.com/wolfSSL/wolfssl`
-# then set this variable to 1
-CRYPTO_EXAMPLE = 1
+# Perform AES tests
+AES_TEST = 0
 
 OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_uart.so \
@@ -22,13 +21,16 @@ OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/security.so \
     $(BUILDDIR)/filesystem.so \
     $(BUILDDIR)/commands.so \
-    $(BUILDDIR)/simple_trng.so
+    $(BUILDDIR)/simple_trng.so \
+    $(BUILDDIR)/hardware_crypto.so
 
-ifeq ($(CRYPTO_EXAMPLE), 1)
-OBJECTS += $(BUILDDIR)/simple_crypto.so
+ifeq ($(AES_TEST), 1)
+OBJECTS +=$(BUILDDIR)/aes_test.so
+CFLAGS += -DAES_TEST=1
+endif
+
 
 # change C flags
-CFLAGS += -DCRYPTO_EXAMPLE=1
 CFLAGS += -DNO_WOLFSSL_DIR
 CFLAGS += -DWOLFSSL_AES_DIRECT
 CFLAGS += -DSINGLE_THREADED
@@ -38,22 +40,20 @@ CFLAGS += -DWOLFSSL_USER_IO
 CFLAGS += -DNO_WRITEV -DTIME_T_NOT_64BIT
 CFLAGS += -DNO_FILESYSTEM
 # tells wolfssl that we will handle RNG on the baremetal target
-# user will need to implement the callbacks
 CFLAGS += -DNO_DEV_RANDOM
 CFLAGS += -DWC_NO_DEFAULT_DEVID
 CFLAGS += -DWOLF_CRYPTO_CB
 CFLAGS += -DWOLFSSL_SMALL_STACK
+CFLAGS += -DWOLFCRYPT_ONLY # we only need the wolfcrypt library, not all of wolfssl
+CFLAGS += -DHAVE_AESGCM
+CFLAGS += -DMAX_CRYPTO_DEVID_CALLBACKS=2  # one for the trng and one for the hardware crypto accelerator
 
 WOLFSSL_INC = wolfssl/wolfcrypt/src
 CFLAGS += -I./wolfssl
 
-# we need to build these objects for the simple crypto example
-OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/hash.o
-OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/cryptocb.o
-OBJECTS += $(WOLFSSL_INC)/sha256.o $(WOLFSSL_INC)/hmac.o
-OBJECTS += $(WOLFSSL_INC)/pwdbased.o $(WOLFSSL_INC)/memory.o
-OBJECTS += $(WOLFSSL_INC)/misc.o
-endif
+# needed for wolfcrypt
+OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/cryptocb.o
+OBJECTS += $(WOLFSSL_INC)/wc_port.o
 
 NAME = hsm
 
@@ -90,12 +90,9 @@ $(BUILDDIR)/%.so: ./src/%.c | $(BUILDDIR)
 	@ echo Building $@
 	@ $(CC) $(CFLAGS) -c $< -o $@
 
-# if compiling with the crypto example, compile all crypto objects
-ifeq ($(CRYPTO_EXAMPLE), 1)
 $(WOLFSSL_INC)/%.o: $(WOLFSSL_INC)/%.c
 	@ echo Building $@
 	@ $(CC) $(CFLAGS) -c $< -o $@
-endif
 
 $(BUILDDIR)/$(NAME).elf: $(OBJECTS)
 	@ echo linking $@
