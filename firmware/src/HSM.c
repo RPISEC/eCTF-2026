@@ -27,10 +27,12 @@
 #include "status_led.h"
 #include "simple_uart.h"
 #include "hardware_crypto.h"
-
-// TODO Remove this if we endup changing crypto
-#include "simple_crypto.h"
 #include "simple_trng.h"
+
+#ifdef AES_TEST
+#include "aes_test.h"
+#endif
+
 
 /**********************************************************
  ************************ GLOBALS *************************
@@ -115,6 +117,10 @@ int main(void) {
         // Handle list command
         case LIST_MSG:
             STATUS_LED_OFF();
+            #ifdef AES_TEST
+            test_aes_gcm();
+            test_aes_gcm_errors();
+            #endif // AES_TEST
             list(pkt_len, uart_buf);
             break;
 
