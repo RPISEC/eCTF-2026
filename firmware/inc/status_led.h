@@ -11,12 +11,12 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-#ifndef __STATUS_LED__
-#define __STATUS_LED__
+#ifndef __STATUS_LED_H__
+#define __STATUS_LED_H__
 
 #include "ti_msp_dl_config.h"
 
 #define STATUS_LED_ON(void) DL_GPIO_setPins(LEDS_PORT, LEDS_STATUS_LED_PIN)
 #define STATUS_LED_OFF(void) DL_GPIO_clearPins(LEDS_PORT, LEDS_STATUS_LED_PIN)
 
-#endif // __STATUS_LED__
+#endif // __STATUS_LED_H__

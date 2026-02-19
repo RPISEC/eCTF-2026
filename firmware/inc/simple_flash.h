@@ -11,8 +11,8 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-#ifndef __SIMPLE_FLASH__
-#define __SIMPLE_FLASH__
+#ifndef __SIMPLE_FLASH_H__
+#define __SIMPLE_FLASH_H__
 
 #include <stdint.h>
 #include <string.h>
@@ -63,4 +63,4 @@ void flash_simple_read(uint32_t address, void* buffer, uint32_t size);
 */
 int flash_simple_write(uint32_t address, void* buffer, uint32_t size);
 
-#endif
+#endif //__SIMPLE_FLASH_H__

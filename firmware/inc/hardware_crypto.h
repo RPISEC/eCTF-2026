@@ -1,5 +1,5 @@
-#ifndef __HARDWARE_CRYPTO__
-#define __HARDWARE_CRYPTO__
+#ifndef __HARDWARE_CRYPTO_H__
+#define __HARDWARE_CRYPTO_H__
 
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/cryptocb.h>
@@ -13,4 +13,4 @@
 int init_hardware_crypto(void);
 int callbackHardwareCrypto(int devId, wc_CryptoInfo* info, void* ctx);
 
-#endif // __HARDWARE_CRYPTO__
+#endif // __HARDWARE_CRYPTO_H__

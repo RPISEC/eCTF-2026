@@ -11,8 +11,8 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-#ifndef __HOST_MESSAGING__
-#define __HOST_MESSAGING__
+#ifndef __HOST_MESSAGING_H__
+#define __HOST_MESSAGING_H__
 
 #include <stdio.h>
 #include <stddef.h>
@@ -100,4 +100,4 @@ int read_packet(int uart_id, msg_type_t* cmd, void *buf, uint16_t *len);
 // Macro definitions to write ack message
 #define write_ack(uart_id) write_packet(uart_id, ACK_MSG, NULL, 0)
 
-#endif
+#endif // __HOST_MESSAGING_H__

@@ -28,7 +28,7 @@ KEY32_LEN = 32
 PIN_SALT_LEN = 16
 KS_IV_LEN = 12
 KS_TAG_LEN = 16
-WALLET_ITERS = 100000
+WALLET_ITERS = 10
 
 CLEAR_STORAGE_LEN = (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY32_LEN) + (MAX_NUM_GROUPS * KEY32_LEN)
 KEYSTORE_LEN = (MAX_NUM_GROUPS * KEY32_LEN) * 3
@@ -108,7 +108,7 @@ def _build_clear_storage(permission_entries, groups_payload):
         group_key = entry["group_key"]
         group_data = groups_payload.get(group_key)
         if group_data is None:
-            raise ValueError(f"Missing group {group_key} in secrets file")
+            raise ValueError(f"Missing group {group_key} in secrets file ({permission_entries})")
 
         group_ids[idx] = entry["group_id"]
         perms[idx] = entry["perms"]

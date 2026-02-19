@@ -23,7 +23,8 @@ OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/commands.so \
     $(BUILDDIR)/simple_trng.so \
     $(BUILDDIR)/hardware_crypto.so \
-    $(BUILDDIR)/timer.so
+    $(BUILDDIR)/timer.so \
+    $(BUILDDIR)/wallet.so
 
 ifeq ($(AES_TEST), 1)
 OBJECTS +=$(BUILDDIR)/aes_test.so
@@ -54,7 +55,10 @@ CFLAGS += -I./wolfssl
 
 # needed for wolfcrypt
 OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/cryptocb.o
-OBJECTS += $(WOLFSSL_INC)/wc_port.o
+OBJECTS += $(WOLFSSL_INC)/wc_port.o $(WOLFSSL_INC)/pwdbased.o
+OBJECTS += $(WOLFSSL_INC)/memory.o $(WOLFSSL_INC)/hash.o
+OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
+OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
 
 NAME = hsm
 

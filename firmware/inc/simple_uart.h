@@ -12,8 +12,8 @@
  */
 
 
-#ifndef __SIMPLE_UART__
-#define __SIMPLE_UART__
+#ifndef __SIMPLE_UART_H__
+#define __SIMPLE_UART_H__
 
 #include <stdio.h>
 #include <stdint.h>
@@ -48,4 +48,4 @@ int uart_readbyte(int uart_id);
 */
 void uart_writebyte(int uart_id, uint8_t data);
 
-#endif // __SIMPLE_UART__
+#endif // __SIMPLE_UART_H__
