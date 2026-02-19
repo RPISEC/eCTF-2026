@@ -14,6 +14,7 @@
 #include "host_messaging.h"
 #include "commands.h"
 #include "filesystem.h"
+#include "wallet.h"
 
 /* IMPORTANT COMPONENTS FROM HSM.c */
 // extern file_t hsm_status[MAX_FILE_COUNT];
@@ -67,6 +68,13 @@ int list(uint16_t pkt_len, uint8_t *buf) {
 
     // copy relevant fields into the final struct
     generate_list_files(&file_list);
+
+    int chk = wallet_unlock(command->pin);
+    if (chk != 0) {
+        print_debug("Could not unlock wallet.");
+        print_hex_debug(&chk, sizeof(int));
+    }
+    print_debug("Successfully unlocked wallet.");
 
     if (!check_pin(command->pin)) {
         print_error("Invalid pin");
@@ -188,7 +196,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     // prep request to neighbor
     request.slot = command->read_slot;
-    memcpy(&request.permissions, &global_permissions, sizeof(group_permission_t) * MAX_PERMS);
+    // memcpy(&request.permissions, &global_permissions, sizeof(group_permission_t) * MAX_PERMS);
 
     // request the file from the neighboring device
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&request, sizeof(receive_request_t));
