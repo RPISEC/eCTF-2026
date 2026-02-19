@@ -22,7 +22,8 @@ OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/filesystem.so \
     $(BUILDDIR)/commands.so \
     $(BUILDDIR)/simple_trng.so \
-    $(BUILDDIR)/hardware_crypto.so
+    $(BUILDDIR)/hardware_crypto.so \
+    $(BUILDDIR)/timer.so
 
 ifeq ($(AES_TEST), 1)
 OBJECTS +=$(BUILDDIR)/aes_test.so
