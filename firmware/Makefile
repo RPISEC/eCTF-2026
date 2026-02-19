@@ -39,14 +39,8 @@ CFLAGS += -DHAVE_PK_CALLBACKS
 CFLAGS += -DWOLFSSL_USER_IO
 CFLAGS += -DNO_WRITEV -DTIME_T_NOT_64BIT
 CFLAGS += -DNO_FILESYSTEM
-# tells wolfssl that we will handle RNG on the baremetal target
-CFLAGS += -DNO_DEV_RANDOM
-CFLAGS += -DWC_NO_DEFAULT_DEVID
-CFLAGS += -DWOLF_CRYPTO_CB
-CFLAGS += -DWOLFSSL_SMALL_STACK
-CFLAGS += -DWOLFCRYPT_ONLY # we only need the wolfcrypt library, not all of wolfssl
-CFLAGS += -DHAVE_AESGCM
-CFLAGS += -DMAX_CRYPTO_DEVID_CALLBACKS=2  # one for the trng and one for the hardware crypto accelerator
+# specify wolfcrypt settings in user_settings.h
+CFLAGS += -DWOLFSSL_USER_SETTINGS
 
 WOLFSSL_INC = wolfssl/wolfcrypt/src
 CFLAGS += -I./wolfssl
