@@ -11,8 +11,8 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-#ifndef __FILESYSTEM__
-#define __FILESYSTEM__
+#ifndef __FILESYSTEM_H__
+#define __FILESYSTEM_H__
 
 #include <stdbool.h>
 #include "simple_flash.h"
@@ -149,4 +149,4 @@ int read_file(slot_t slot, file_t *dest);
 */
 const filesystem_entry_t *get_file_metadata(slot_t slot);
 
-#endif
+#endif // __FILESYSTEM_H__
