@@ -10,6 +10,8 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin);
 void wallet_lock(void);
 
 bool wallet_has_perms(uint16_t group_id, uint8_t perms);
+bool check_pin(const unsigned char *pin);
+
 
 WARN_UNUSED_RESULT int get_k_storage(key32_t *key, uint16_t group_id);
 WARN_UNUSED_RESULT int get_w_priv(key32_t *key, uint16_t group_id);

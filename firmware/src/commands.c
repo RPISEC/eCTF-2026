@@ -69,13 +69,6 @@ int list(uint16_t pkt_len, uint8_t *buf) {
     // copy relevant fields into the final struct
     generate_list_files(&file_list);
 
-    int chk = wallet_unlock(command->pin);
-    if (chk != 0) {
-        print_debug("Could not unlock wallet.");
-        print_hex_debug(&chk, sizeof(int));
-    }
-    print_debug("Successfully unlocked wallet.");
-
     if (!check_pin(command->pin)) {
         print_error("Invalid pin");
         return -1;
@@ -145,10 +138,14 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
+    print_debug("Correct pin");
+
     if (!validate_permission(command->group_id, PERM_WRITE)) {
         print_error("Invalid permission");
         return -1;
     }
+
+    print_debug("Permission validated");
 
     create_file(
         &curr_file,
@@ -158,11 +155,15 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         command->contents
     );
 
+    print_debug("File created");
+
     // Store the file persistently
     if (write_file(command->slot, &curr_file, command->uuid) < 0) {
         print_error("Error storing file");
         return -1;
     }
+
+    print_debug("File written");
 
     // Success message with an empty body
     write_packet(CONTROL_INTERFACE, WRITE_MSG, NULL, 0);

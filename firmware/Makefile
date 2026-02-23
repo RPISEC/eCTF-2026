@@ -10,7 +10,7 @@ VPATH = "src"
 LINKERFILE = "firmware.ld"
 
 # Perform AES tests
-AES_TEST = 1
+AES_TEST = 0
 
 OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_uart.so \

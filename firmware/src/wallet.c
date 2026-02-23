@@ -1,11 +1,11 @@
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
+#include "host_messaging.h"
 #include "secrets.h"
+#include "wallet.h"
 #include "wolfssl/wolfcrypt/hash.h"
 #include "wolfssl/wolfcrypt/hmac.h"
-#include "wallet.h"
-#include "host_messaging.h"
 
 #define PERM_R 0x01
 #define PERM_W 0x02
@@ -69,7 +69,6 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
         return -1;
     }
 
-
     ret = wc_AesGcmSetKey(&ctx, pin_key, sizeof(key32_t));
     if (ret != 0) {
         return -2;
@@ -108,6 +107,18 @@ bool wallet_has_perms(uint16_t group_id, uint8_t perms) {
     uint8_t group_perms = wallet->clear.perms[index];
     return !!(group_perms & perms);
 }
+
+/* Pin must point to a 6-byte buffer. Returns true for correct pin, false
+ * otherwise*/
+bool check_pin(const unsigned char *pin) {
+    int chk = wallet_unlock(pin);
+    if (chk != 0) {
+        return false;
+    }
+
+    wallet_lock();
+    return true;
+};
 
 /* Returns 0 on success. */
 WARN_UNUSED_RESULT int get_k_storage(key32_t *key, uint16_t group_id) {

@@ -32,13 +32,6 @@ typedef struct {
     bool receive;
 } group_permission_t;
 
-/** @brief Validate a pin against the HSM's pin
- *
- *  @param pin Requested pin to validate.
- *
- *  @return True if the pin is valid. False if not.
-*/
-bool check_pin(unsigned char *pin);
 
 /** @brief Ensure the HSM has the requested permission
  *
