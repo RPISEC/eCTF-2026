@@ -6,8 +6,6 @@
 
 typedef uint8_t key32_t[32];
 
-void wallet_init(void);
-
 WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin);
 void wallet_lock(void);
 
