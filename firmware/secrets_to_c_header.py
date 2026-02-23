@@ -164,6 +164,7 @@ def _build_keystore(permission_entries, groups_payload):
 
 
 def _write_c_array(f, name, data, columns=12):
+    f.write(f"__attribute__((section(\".wallet\"), aligned(8)))")
     f.write(f"static const uint8_t {name}[{len(data)}] = {{\n")
     for offset in range(0, len(data), columns):
         chunk = ", ".join(f"0x{b:02x}" for b in data[offset:offset + columns])
@@ -200,8 +201,8 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
         raise ValueError("Wallet flash length mismatch.")
 
     with open(os.path.join(path, "secrets.h"), "w") as f:
-        f.write("#ifndef __SECRETS__\n")
-        f.write("#define __SECRETS__\n")
+        f.write("#ifndef __SECRETS_H__\n")
+        f.write("#define __SECRETS_H__\n")
         f.write("#include <stdint.h>\n")
         f.write(f"#define MAX_NUM_GROUPS {MAX_NUM_GROUPS}\n")
         f.write(f"#define PROVISIONED_NUM_GROUPS {len(permission_entries)}\n")
@@ -214,7 +215,7 @@ def secrets_to_c_header(path, hsm_pin, permissions, secrets_blob):
         f.write(f"#define KS_CT_LEN {KS_CT_LEN}\n")
         f.write(f"#define WALLET_FLASH_LEN {WALLET_FLASH_LEN}\n\n")
         _write_c_array(f, "wallet_flash", wallet_flash)
-        f.write("\n#endif  // __SECRETS__\n")
+        f.write("\n#endif  // __SECRETS_H__\n")
         f.write("\n")
 
 

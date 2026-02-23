@@ -67,8 +67,6 @@ void init() {
         print_debug("hardware crypto init error");
     }
 
-    wallet_init();
-
     init_fs();
 }
 

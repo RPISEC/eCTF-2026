@@ -33,6 +33,7 @@
 *****************************************************************************/
 -uinterruptVectors
 --stack_size=256
+--heap_size=4096
 
 #define FLASH_BASE 0x6000
 
@@ -61,6 +62,7 @@ SECTIONS
     .binit        : palign(8) {} > FLASH
     .files        : palign(8)
     .TI.ramfunc   : load = FLASH, palign(8), run=SRAM, table(BINIT)
+    .wallet       : palign(8) {} > APP2
 
     .vtable :   > SRAM
     .args   :   > SRAM

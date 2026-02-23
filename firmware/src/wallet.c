@@ -39,7 +39,7 @@ typedef struct __attribute__((packed)) {
     uint8_t wallet_tag[16];
 } wallet_flash_t;
 
-static wallet_flash_t *wallet;
+static wallet_flash_t *wallet = (wallet_flash_t *)&wallet_flash;
 
 static keystore_t keystore;
 static bool is_locked = true;
@@ -55,8 +55,6 @@ static int8_t get_group_index(uint16_t group_id) {
     /* Group not found, return error. */
     return -1;
 }
-
-void wallet_init(void) { wallet = (wallet_flash_t *)wallet_flash; }
 
 /* Pin is encoded as 6 hex digit chars.
  * Returns 0 on success. */
