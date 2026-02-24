@@ -19,4 +19,4 @@ WARN_UNUSED_RESULT int get_c_priv(key32_t *key, uint16_t group_id);
 WARN_UNUSED_RESULT int get_w_pub(key32_t *key, uint16_t group_id);
 WARN_UNUSED_RESULT int get_c_pub(key32_t *key, uint16_t group_id);
 
-#endif // __WALLET__
+#endif // __WALLET_H__
