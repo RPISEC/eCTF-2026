@@ -80,8 +80,7 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
                            wallet->wallet_tag, KS_TAG_LEN,
                            (uint8_t *)&(wallet->clear), CLEAR_STORAGE_LEN);
     if (ret != 0) {
-        print_debug("keystore decryption error");
-        print_hex_debug(&ret, sizeof(int));
+        /* Decryption error (incorrect key) */
         return -3;
     }
 
