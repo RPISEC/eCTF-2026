@@ -12,6 +12,9 @@ LINKERFILE = "firmware.ld"
 # Perform AES tests
 AES_TEST = 0
 
+# Perform TRNG tests
+TRNG_TEST = 0
+
 OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_uart.so \
     $(BUILDDIR)/ti_msp_dl_config.so \
@@ -28,6 +31,11 @@ OBJECTS = $(BUILDDIR)/HSM.so \
 ifeq ($(AES_TEST), 1)
 OBJECTS +=$(BUILDDIR)/aes_test.so
 CFLAGS += -DAES_TEST=1
+endif
+
+ifeq ($(TRNG_TEST), 1)
+OBJECTS +=$(BUILDDIR)/trng_test.so
+CFLAGS += -DTRNG_TEST=1
 endif
 
 
@@ -52,6 +60,11 @@ OBJECTS += $(WOLFSSL_INC)/wc_port.o $(WOLFSSL_INC)/pwdbased.o
 OBJECTS += $(WOLFSSL_INC)/memory.o $(WOLFSSL_INC)/hash.o
 OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
 OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
+
+# we also need random.o for TRNG testing
+ifeq ($(TRNG_TEST), 1)
+OBJECTS += $(WOLFSSL_INC)/random.o
+endif
 
 NAME = hsm
 

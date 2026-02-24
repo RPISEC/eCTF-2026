@@ -16,6 +16,8 @@
 #include "filesystem.h"
 #include "wallet.h"
 
+#include "trng_test.h"
+
 /* IMPORTANT COMPONENTS FROM HSM.c */
 // extern file_t hsm_status[MAX_FILE_COUNT];
 static file_t current_file;

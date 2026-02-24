@@ -34,6 +34,10 @@
 #include "aes_test.h"
 #endif
 
+#ifdef TRNG_TEST
+#include "trng_test.h"
+#endif
+
 
 /**********************************************************
  ************************ GLOBALS *************************
@@ -123,6 +127,9 @@ int main(void) {
             test_aes_gcm();
             test_aes_gcm_errors();
             #endif // AES_TEST
+            #ifdef TRNG_TEST
+            test_trng_callback();
+            #endif // TRNG_TEST
             list(pkt_len, uart_buf);
             break;
 

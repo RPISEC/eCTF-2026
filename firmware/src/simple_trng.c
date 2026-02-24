@@ -1,6 +1,7 @@
 #include "simple_trng.h"
 #include "host_messaging.h"
 #include "ti/driverlib/dl_trng.h"
+#include "wolfssl/wolfcrypt/error-crypt.h"
 
 #define TRNG_CMD_TIMEOUT 100000UL
 
@@ -103,4 +104,20 @@ void trng_shutdown(void) {
     trng_ready = false;
     DL_TRNG_sendCommand(TRNG, DL_TRNG_CMD_PWROFF);
     wait_cmd_done();
+}
+
+/*
+Callback for wolfcrypt to get random bytes from the TRNG.
+*/
+int custom_rand_generate_block(unsigned char* output, unsigned int sz) {
+    for (unsigned int i = 0; i < sz; i += sizeof(uint32_t)) {
+        uint32_t rand = trng_get_u32();
+        if (rand == 0) {
+            // return hardware crypto error
+            return WC_HW_E;
+        }
+        unsigned int copy_sz = (sz - i) < sizeof(uint32_t) ? (sz - i) : sizeof(uint32_t);
+        memcpy(output + i, &rand, copy_sz);
+    }
+    return 0;
 }

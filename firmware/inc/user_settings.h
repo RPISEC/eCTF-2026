@@ -10,8 +10,14 @@
 
 // callback settings for hardware integration
 #define WOLF_CRYPTO_CB
-// one for the trng and one for the hardware crypto accelerator
-#define MAX_CRYPTO_DEVID_CALLBACKS 2
+// only device callback needed is for the hardware crypto accelerator
+#define MAX_CRYPTO_DEVID_CALLBACKS 1
+
+// disable pRNG
+#define WC_NO_HASHDRBG
+// callback to use TRNG for all random number generation
+extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
+#define CUSTOM_RAND_GENERATE_BLOCK custom_rand_generate_block
 
 // crypto algorithms
 #define HAVE_AESGCM
