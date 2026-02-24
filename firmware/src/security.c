@@ -13,16 +13,6 @@
 #include "security.h"
 #include "host_messaging.h"
 
-bool check_pin(unsigned char *pin) {
-    print_debug("Checking PIN\n");
-
-    // TODO: the reference design doesn't implement *ANY* security.
-    // This function currently does nothing. Your team should add the
-    // appropriate security checks here to implement the security
-    // requirements.
-    return true;
-}
-
 bool validate_permission(uint16_t group_id, permission_enum_t perm) {
     char output_buf[128] = {0};
 

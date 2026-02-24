@@ -147,10 +147,14 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
+    print_debug("Correct pin");
+
     if (!validate_permission(command->group_id, PERM_WRITE)) {
         print_error("Invalid permission");
         return -1;
     }
+
+    print_debug("Permission validated");
 
     create_file(
         &curr_file,
@@ -160,11 +164,15 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         command->contents
     );
 
+    print_debug("File created");
+
     // Store the file persistently
     if (write_file(command->slot, &curr_file, command->uuid) < 0) {
         print_error("Error storing file");
         return -1;
     }
+
+    print_debug("File written");
 
     // Success message with an empty body
     write_packet(CONTROL_INTERFACE, WRITE_MSG, NULL, 0);

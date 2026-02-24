@@ -41,18 +41,8 @@ CFLAGS += -DHAVE_PK_CALLBACKS
 CFLAGS += -DWOLFSSL_USER_IO
 CFLAGS += -DNO_WRITEV -DTIME_T_NOT_64BIT
 CFLAGS += -DNO_FILESYSTEM
-# tells wolfssl that we will handle RNG on the baremetal target
-CFLAGS += -DNO_DEV_RANDOM
-CFLAGS += -DWC_NO_DEFAULT_DEVID
-CFLAGS += -DWOLF_CRYPTO_CB
-CFLAGS += -DWOLFSSL_SMALL_STACK
-CFLAGS += -DWOLFCRYPT_ONLY # we only need the wolfcrypt library, not all of wolfssl
-CFLAGS += -DHAVE_AESGCM
-CFLAGS += -DHAVE_BLAKE2S
-CFLAGS += -DHAVE_BLAKE2
-CFLAGS += -DHAVE_PBKDF2
-
-CFLAGS += -DMAX_CRYPTO_DEVID_CALLBACKS=2  # one for the trng and one for the hardware crypto accelerator
+# specify wolfcrypt settings in user_settings.h
+CFLAGS += -DWOLFSSL_USER_SETTINGS
 
 WOLFSSL_INC = wolfssl/wolfcrypt/src
 CFLAGS += -I./wolfssl
@@ -63,7 +53,6 @@ OBJECTS += $(WOLFSSL_INC)/wc_port.o $(WOLFSSL_INC)/pwdbased.o
 OBJECTS += $(WOLFSSL_INC)/memory.o $(WOLFSSL_INC)/hash.o
 OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
 OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
-OBJECTS += $(WOLFSSL_INC)/blake2s.o
 
 NAME = hsm
 

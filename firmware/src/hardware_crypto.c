@@ -56,16 +56,16 @@ typedef struct {
 } Buffer_uint32;
 
 // state flags for AES engine
-static uint32_t _hc_operation_in_progress = false;
-static uint32_t _hc_aad_flag = 0;
+static volatile uint32_t _hc_operation_in_progress = false;
+static volatile uint32_t _hc_aad_flag = 0;
 
 // global state for interrupt handler
 static Buffer_uint32 _hc_aes_aad_input = {NULL, 0};
 static Buffer_uint32 _hc_aes_input = {NULL, 0};
 static Buffer_uint32 _hc_aes_output = {NULL, 0};
 static uint32_t _hc_aes_tag[AES_AUTH_TAG_SIZE/sizeof(uint32_t)];
-static uint32_t _hc_input_idx = 0;
-static uint32_t _hc_output_idx = 0;
+static volatile uint32_t _hc_input_idx = 0;
+static volatile uint32_t _hc_output_idx = 0;
 
 /**
  * Note: wolfcrypt uses very similar struct definitions for wc_CryptoCb_AesAuthEnc and wc_CryptoCb_AesAuthDec
@@ -192,12 +192,22 @@ int callbackHardwareCrypto(int devId, wc_CryptoInfo* info, void* ctx) {
        so we allocate our own uint32_t buffers and copy data over to them
        we use length to refer to number of items, not size in bytes, so length is rounded up from size to ensure we have enough space for the data
     */
-    _hc_aes_aad_input.arr = malloc(params.authInSz);
-    _hc_aes_aad_input.length = (params.authInSz + sizeof(uint32_t) - 1) / sizeof(uint32_t);
-    _hc_aes_input.arr = malloc(params.sz);
-    _hc_aes_input.length = (params.sz + sizeof(uint32_t) - 1) / sizeof(uint32_t);
-    _hc_aes_output.arr = malloc(params.sz);
-    _hc_aes_output.length = _hc_aes_input.length; // same length as input
+    _hc_aes_aad_input.length =
+        ((params.authInSz + AES_BLOCK_SIZE - 1) / AES_BLOCK_SIZE) *
+        (AES_BLOCK_SIZE / sizeof(uint32_t));
+    _hc_aes_aad_input.arr = malloc(_hc_aes_aad_input.length * sizeof(uint32_t));
+
+    _hc_aes_input.length = ((params.sz + AES_BLOCK_SIZE - 1) / AES_BLOCK_SIZE) *
+                           (AES_BLOCK_SIZE / sizeof(uint32_t));
+    _hc_aes_input.arr = malloc(_hc_aes_input.length * sizeof(uint32_t));
+
+    _hc_aes_output.length = _hc_aes_input.length;
+    _hc_aes_output.arr = malloc(_hc_aes_output.length * sizeof(uint32_t));
+
+    XMEMSET(_hc_aes_aad_input.arr, 0, _hc_aes_aad_input.length * sizeof(uint32_t));
+    XMEMSET(_hc_aes_input.arr, 0, _hc_aes_input.length * sizeof(uint32_t));
+    XMEMSET(_hc_aes_output.arr, 0, _hc_aes_output.length * sizeof(uint32_t));
+
     XMEMCPY(_hc_aes_aad_input.arr, params.authIn, params.authInSz);
     XMEMCPY(_hc_aes_input.arr, params.in, params.sz);
 
