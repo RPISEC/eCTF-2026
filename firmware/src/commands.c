@@ -336,20 +336,46 @@ int bench(uint16_t pkt_len, uint8_t *buf) {
     // Ignore all packets, always do the benchmark
 
     // Bench 1: wolfcrypt hash 10000 times, and write the time
-    char output[32];
+    char output[96];
+    char debug_msg[128];
     const byte* pin = "123456";
     int plen = 6;
     const byte* salt ="bbbbbbbbbbbbbbbb";
     int slen = 16;
 
+    // PBKDF2
     reset_timer();
-    wc_PBKDF2(output, pin, 6, salt, slen, 10000, 32, WC_HASH_TYPE_BLAKE2S);
-    snprintf(output, sizeof(output), "Took %f ms to run 10000\n", get_timer_ms());
-    print_debug(output);
+    int err = wc_PBKDF2(output, pin, 6, salt, slen, 10, 96, WC_HASH_TYPE_SHA256);
+    snprintf(debug_msg, sizeof(debug_msg), "%d: Took %f ms to run 10\n", err, get_timer_ms());
+    print_debug(debug_msg);
     
     reset_timer();
-    wc_PBKDF2(output, pin, 6, salt, slen, 5000, 32, WC_HASH_TYPE_BLAKE2S);
-    snprintf(output, sizeof(output), "Took %f ms to run 5000\n", get_timer_ms());    
-    print_debug(output);
+    wc_PBKDF2(output, pin, 6, salt, slen, 100, 96, WC_HASH_TYPE_SHA256);
+    snprintf(debug_msg, sizeof(debug_msg), "Took %f ms to run 100\n", get_timer_ms());    
+    print_debug(debug_msg);
 
+    // Unlock Wallet
+    reset_timer();
+    for (int i = 0; i < 5; i++) {
+        wallet_lock();
+        wallet_unlock("123abc");
+    }
+    snprintf(debug_msg, sizeof(debug_msg), "Took %f ms to run 5\n", get_timer_ms());
+    print_debug(debug_msg);
+    reset_timer();
+    for (int i = 0; i < 10; i++) {
+        wallet_lock();
+        wallet_unlock("123abc");
+    }
+    snprintf(debug_msg, sizeof(debug_msg), "Took %f ms to run 10\n", get_timer_ms());
+    print_debug(debug_msg);
+
+    // TRNG
+    reset_timer();
+    volatile uint32_t _;
+    for (int i = 0; i < 1000; i++) {
+        _ = trng_get_u32();
+    }
+    snprintf(debug_msg, sizeof(debug_msg), "Took %f ms to run 1000 (trng)\n", get_timer_ms());
+    print_debug(debug_msg);
 }

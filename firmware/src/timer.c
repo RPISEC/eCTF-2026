@@ -34,7 +34,7 @@ float get_timer_ms() {
     return (float)total_ticks / (TIMER_CLOCK_FREQ / 1000.0f);
 }
 
-void TIMER_0_INST_IRQHanlder(void) {
+void TIMER_0_INST_IRQHandler(void) {
     if (DL_Timer_getPendingInterrupt(TIMER_0_INST) == DL_TIMERG_IIDX_ZERO) {
         timer_overflows++;
     }
