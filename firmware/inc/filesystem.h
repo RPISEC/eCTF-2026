@@ -86,7 +86,7 @@ The reference design allocates files for each slot as follows:
 #define STORED_FILE_SIZE FLASH_PAGE_SIZE*FILE_PAGE_COUNT
 
 // first flash address for files
-#define FILES_START_ADDR 0x10000
+#define FILES_START_ADDR 0x26000
 
 #define FILE_IN_USE 0xdeadbeef
 // used to actually define the file object
