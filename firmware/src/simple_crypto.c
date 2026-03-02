@@ -16,6 +16,8 @@
 #include "security.h"
 #include <stdint.h>
 #include <string.h>
+#include "hardware_crypto.h"
+
 
 
 /******************************** FUNCTION PROTOTYPES ********************************/
@@ -24,34 +26,48 @@
  * @param plaintext A pointer to a buffer of length len containing the
  *          plaintext to encrypt
  * @param len The length of the plaintext to encrypt. Must be a multiple of
- *          BLOCK_SIZE (16 bytes)
- * @param key A pointer to a buffer of length KEY_SIZE (16 bytes) containing
+ *          BLOCK_SIZE (32 bytes)
+ * @param key A pointer to a buffer of length KEY_SIZE containing
  *          the key to use for encryption
+ * @param iv A pointer to a buffer of length IV_SIZE containing
+ *          the iv to use for encryption
  * @param ciphertext A pointer to a buffer of length len where the resulting
  *          ciphertext will be written to
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *ciphertext) {
-    Aes ctx; // Context for encryption
-    int result; // Library result
+int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *ciphertext) {
+    Aes aes; // Context for encryption
+    int ret; // Library result
+    uint8_t auth_tag[AES_AUTH_TAG_SIZE];
 
     // Ensure valid length
     if (len <= 0 || len % BLOCK_SIZE)
         return -1;
 
-    // Set the key for encryption
-    result = wc_AesSetKey(&ctx, key, 16, NULL, AES_ENCRYPTION);
-    if (result != 0)
-        return result; // Report error
-
-
-    // Encrypt each block
-    for (int i = 0; i < len - 1; i += BLOCK_SIZE) {
-        result = wc_AesEncryptDirect(&ctx, ciphertext + i, plaintext + i);
-        if (result != 0)
-            return result; // Report error
+    ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
+    if (ret != 0) {
+        wc_AesFree(&aes);
+        return ret;
     }
+    // Set the key for encryption
+    ret = wc_AesGcmSetKey(&aes, key, 16, NULL, AES_ENCRYPTION);
+    if (ret != 0) {
+        wc_AesFree(&aes);
+        return ret;
+    }
+
+    ret = wc_AesGcmEncrypt(
+        &aes,
+        ciphertext,
+        plaintext,  len,
+        iv,         IV_SIZE,
+        auth_tag,   AES_AUTH_TAG_SIZE,
+        NULL,       0
+    );
+    wc_AesFree(&aes);
+    if (ret != 0)
+        return ret;
     return 0;
 }
 
@@ -63,30 +79,45 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *ciphertex
  *          BLOCK_SIZE (16 bytes)
  * @param key A pointer to a buffer of length KEY_SIZE (16 bytes) containing
  *          the key to use for decryption
+ * @param iv A pointer to a buffer of length IV_SIZE containing
+ *          the iv to use for encryption
  * @param plaintext A pointer to a buffer of length len where the resulting
  *          plaintext will be written to
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintext) {
-    Aes ctx; // Context for decryption
-    int result; // Library result
+int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *plaintext) {
+    Aes aes; // Context for encryption
+    int ret; // Library result
+    uint8_t auth_tag[AES_AUTH_TAG_SIZE];
 
     // Ensure valid length
     if (len <= 0 || len % BLOCK_SIZE)
         return -1;
 
-    // Set the key for decryption
-    result = wc_AesSetKey(&ctx, key, 16, NULL, AES_DECRYPTION);
-    if (result != 0)
-        return result; // Report error
-
-    // Decrypt each block
-    for (int i = 0; i < len - 1; i += BLOCK_SIZE) {
-        result = wc_AesDecryptDirect(&ctx, plaintext + i, ciphertext + i);
-        if (result != 0)
-            return result; // Report error
+    ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
+    if (ret != 0) {
+        return ret;
+        wc_AesFree(&aes);
     }
+    // Set the key for encryption
+    ret = wc_AesGcmSetKey(&aes, key, 16, NULL, AES_ENCRYPTION);
+    if (ret != 0) {
+        wc_AesFree(&aes);
+        return ret;
+    }
+
+    ret = wc_AesGcmDecrypt(
+        &aes,
+        plaintext,
+        ciphertext,  len,
+        iv,         IV_SIZE,
+        auth_tag,   AES_AUTH_TAG_SIZE,
+        NULL,       0
+    );
+    wc_AesFree(&aes);
+    if (ret != 0)
+        return ret;
     return 0;
 }
 
