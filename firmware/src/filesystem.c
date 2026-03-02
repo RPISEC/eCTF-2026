@@ -15,6 +15,9 @@
 
 #include "filesystem.h"
 #include "simple_flash.h"
+#include "simple_trng.h"
+#include "simple_crypto.h"
+#include "host_messaging.h" // DEBUG REMOVE ME
 
 int load_fat() {
     flash_simple_read((uint32_t)_FLASH_FAT_START, FILE_ALLOCATION_TABLE, sizeof(FILE_ALLOCATION_TABLE));
@@ -43,7 +46,8 @@ int init_fs() {
 */
 bool is_slot_in_use(slot_t slot) {
     file_t temp_file;
-    return (!read_file(slot, &temp_file) && temp_file.in_use == FILE_IN_USE);
+    get_file_headers(slot, &temp_file);
+    return temp_file.in_use == FILE_IN_USE;
 }
 
 /** @brief Create a new file object in memory
@@ -64,6 +68,10 @@ int create_file(
     dest->in_use = FILE_IN_USE;
     dest->group_id = group_id;
     dest->contents_len = contents_len;
+    for (int i = 0; i < IV_SIZE / 4; i++) {
+        uint32_t rand = trng_get_u32();
+        memcpy(&dest->iv[i*4], &rand, 4);
+    }
 
     // name must be null terminated, and the contents are defined by a length
     strcpy(dest->name, name);
@@ -77,14 +85,33 @@ int create_file(
  *  @param slot The slot to write the file to
  *  @param src The sourc file to store
  *  @param uuid The UUID to store in the FAT
+ *  @param key The AES key to encrypt with. An IV is generated.
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int write_file(slot_t slot, file_t *src, uint8_t *uuid) {
+int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
     unsigned int length, flash_addr;
 
     flash_addr = FILE_START_PAGE_FROM_SLOT(slot);
-    length = FILE_TOTAL_SIZE(src->contents_len);
+    // Length, rounded to nearest AES block size
+    length = FILE_TOTAL_SIZE(src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE));
+    
+    // Generate random IV
+    for (int i = 0; i < IV_SIZE / 4; i++) {
+        uint32_t rand = trng_get_u32();
+        memcpy(&src->iv[i*4], &rand, 4);
+    }
+
+    print_debug("iv generated");
+
+    // Encrypt the contents
+    int ret = encrypt_sym(src->contents,
+        src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE),
+        key, src->iv, src->contents); // Encrypt in place
+    if (ret != 0)
+        return ret;
+    print_debug("encrypted");
+
     // Update the FAT for the new file
     memcpy(&FILE_ALLOCATION_TABLE[slot].uuid, uuid, UUID_SIZE);
     FILE_ALLOCATION_TABLE[slot].flash_addr = flash_addr;
@@ -104,10 +131,11 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid) {
  *
  *  @param slot The slot to read
  *  @param dest The destination address to store the file
+ *  @param key The AES key to decrypt with. If NULL, skip this step.
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int read_file(slot_t slot, file_t *dest) {
+int read_file(slot_t slot, file_t *dest, uint8_t* key) {
     int flash_addr, file_size;
 
     flash_addr = FILE_ALLOCATION_TABLE[slot].flash_addr;
@@ -117,6 +145,15 @@ int read_file(slot_t slot, file_t *dest) {
     }
     flash_simple_read(flash_addr, dest, file_size);
 
+    get_file_headers(slot, dest);
+
+    // Decrypt the contents
+    if (key == NULL) {
+        return 0;
+    }
+    int ret = decrypt_sym(dest->contents, dest->contents_len + (AES_BLOCK_SIZE - dest->contents_len % AES_BLOCK_SIZE), key, dest->iv, dest->contents); // Decrypt in place
+    if (ret != 0)
+        return ret;
     return 0;
 }
 
@@ -128,4 +165,20 @@ int read_file(slot_t slot, file_t *dest) {
 */
 const filesystem_entry_t *get_file_metadata(slot_t slot) {
     return &FILE_ALLOCATION_TABLE[slot];
+}
+
+/** @brief Get a read-only pointer to a file's headers. This returns a file_t,
+ *         but the contents are garbage data and should not be accessed.
+ *  @param slot The slot to get headers for
+*/
+const int get_file_headers(slot_t slot, file_t *file_headers) {
+    int flash_addr, file_size;
+
+    flash_addr = FILE_ALLOCATION_TABLE[slot].flash_addr;
+    file_size = FILE_ALLOCATION_TABLE[slot].length;
+    if (flash_addr < 0 || file_size < 0) {
+        return -1;
+    }
+    flash_simple_read(flash_addr, file_headers, sizeof(file_t) - MAX_CONTENTS_SIZE);
+    return 0;
 }

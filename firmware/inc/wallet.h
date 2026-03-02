@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <wolfssl/wolfcrypt/wc_port.h>
 
+#define PERM_R 0x01
+#define PERM_W 0x02
+#define PERM_C 0x04
+
 typedef uint8_t key32_t[32];
 
 WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin);

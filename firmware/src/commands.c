@@ -40,7 +40,7 @@ void generate_list_files(list_response_t *file_list) {
     for (uint8_t i = 0; i < MAX_FILE_COUNT; i++) {
         // Check if the file is in use
         if (is_slot_in_use(i)) {
-            read_file(i, &temp_file);
+            get_file_headers(i, &temp_file);
 
             file_list->metadata[file_list->n_files].slot = i;
             file_list->metadata[file_list->n_files].group_id = temp_file.group_id;
@@ -94,19 +94,25 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     read_command_t *command = (read_command_t*)buf;
     read_response_t file_info;
     file_t curr_file;
+    key32_t key;
 
-    if (!check_pin(command->pin)) {
+    if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
     }
 
+    get_file_headers(command->slot, &curr_file);
+    int ret = get_k_storage(&key, curr_file.group_id);
+    wallet_lock();
+
     // zeroizing memory is a pretty good practice
     memset(&file_info, 0, sizeof(read_response_t));
 
-    if (read_file(command->slot, &curr_file) < 0) {
+    if (read_file(command->slot, &curr_file, key) < 0) {
         print_error("Failed to read file");
         return -1;
     }
+    memset(key, 0, KEY_SIZE);
     // copy structure of the persistent file
     memcpy(file_info.name, &curr_file.name, strlen(curr_file.name));
     memcpy(file_info.contents, &curr_file.contents, curr_file.contents_len);
@@ -134,15 +140,22 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     write_command_t *command = (write_command_t*)buf;
     int ret;
     file_t curr_file;
+    key32_t key;
+    char debug_buffer[64];
 
-    if (!check_pin(command->pin)) {
+    if (wallet_unlock(command->pin)) {
+        snprintf(debug_buffer, 32, "Ret: %d", ret);
+        print_debug(debug_buffer);
         print_error("Invalid pin");
         return -1;
     }
 
     print_debug("Correct pin");
 
-    if (!validate_permission(command->group_id, PERM_WRITE)) {
+    ret = get_k_storage(&key, command->group_id);
+    wallet_lock();
+
+    if (!wallet_has_perms(command->group_id, PERM_W)) {
         print_error("Invalid permission");
         return -1;
     }
@@ -160,10 +173,11 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     print_debug("File created");
 
     // Store the file persistently
-    if (write_file(command->slot, &curr_file, command->uuid) < 0) {
+    if (write_file(command->slot, &curr_file, command->uuid, key) < 0) {
         print_error("Error storing file");
         return -1;
     }
+    memset(key, 0, KEY_SIZE);
 
     print_debug("File written");
 
@@ -186,9 +200,10 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     receive_response_t recv_resp;
     msg_type_t cmd;
     uint16_t len_recv_msg;
+    key32_t key;
     int ret;
 
-    if (!check_pin(command->pin)) {
+    if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
     }
@@ -196,6 +211,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     // zeroize the buffers we will use
     memset(&recv_resp, 0, sizeof(recv_resp));
     memset(&request, 0, sizeof(request));
+    
 
     // prep request to neighbor
     request.slot = command->read_slot;
@@ -214,11 +230,14 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
+    ret = get_k_storage(&key, recv_resp.file.group_id);
+
     // write that file into the file system
-    if (write_file(command->write_slot, &recv_resp.file, recv_resp.uuid) < 0) {
+    if (write_file(command->write_slot, &recv_resp.file, recv_resp.uuid, key) < 0) {
         print_error("Writing received file failed");
         return -1;
     }
+    memset(key, 0, KEY_SIZE);
     // empty success message
     write_packet(CONTROL_INTERFACE, RECEIVE_MSG, NULL, 0);
     return 0;
@@ -306,7 +325,8 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
 
             // if this read fails, the other device will not receive a response and
             // may need to be reset before further testing can occur
-            if (read_file(command->slot, &recv_resp.file) < 0) {
+
+            if (read_file(command->slot, &recv_resp.file, NULL) < 0) {
                 print_error("Failed to read file");
                 return -1;
             }

@@ -26,7 +26,7 @@
  * @param plaintext A pointer to a buffer of length len containing the
  *          plaintext to encrypt
  * @param len The length of the plaintext to encrypt. Must be a multiple of
- *          BLOCK_SIZE (32 bytes)
+ *          BLOCK_SIZE (16 bytes)
  * @param key A pointer to a buffer of length KEY_SIZE containing
  *          the key to use for encryption
  * @param iv A pointer to a buffer of length IV_SIZE containing
@@ -51,7 +51,7 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8
         return ret;
     }
     // Set the key for encryption
-    ret = wc_AesGcmSetKey(&aes, key, 16, NULL, AES_ENCRYPTION);
+    ret = wc_AesGcmSetKey(&aes, key, KEY_SIZE);
     if (ret != 0) {
         wc_AesFree(&aes);
         return ret;
@@ -101,7 +101,7 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint
         wc_AesFree(&aes);
     }
     // Set the key for encryption
-    ret = wc_AesGcmSetKey(&aes, key, 16, NULL, AES_ENCRYPTION);
+    ret = wc_AesGcmSetKey(&aes, key, KEY_SIZE);
     if (ret != 0) {
         wc_AesFree(&aes);
         return ret;

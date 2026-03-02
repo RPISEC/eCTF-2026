@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include "simple_flash.h"
+#include "hardware_crypto.h"
 
 // #include "commands.h"
 
@@ -95,7 +96,8 @@ typedef struct {
     group_id_t group_id;
     char name[MAX_NAME_SIZE];
     uint16_t contents_len;
-    uint8_t contents[MAX_CONTENTS_SIZE];
+    uint8_t iv[IV_SIZE];
+    uint8_t contents[MAX_CONTENTS_SIZE]; // encrypted
 } file_t;
 
 /** @brief Initialize the filesystem
@@ -129,7 +131,7 @@ int create_file(file_t *dest, group_id_t group_id, char *name, uint16_t contents
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int write_file(slot_t slot, file_t *src, uint8_t *uuid);
+int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key);
 
 /** @brief Read a file from persistent storage into memory
  *
@@ -138,7 +140,7 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid);
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int read_file(slot_t slot, file_t *dest);
+int read_file(slot_t slot, file_t *dest, uint8_t* key);
 
 
 /** @brief Get a read-only pointer to a file's metadata
@@ -148,5 +150,13 @@ int read_file(slot_t slot, file_t *dest);
  * @return A filesystem_entry_t * on success. NULL on error.
 */
 const filesystem_entry_t *get_file_metadata(slot_t slot);
+
+/** @brief Get a read-only pointer to the file's header. The contents will
+ *         be filled with garbage data and should not be accessed.
+ * 
+ * @param slot The slot to get headers for.
+ * 
+ */
+const int get_file_headers(slot_t slot, file_t *file_headers);
 
 #endif // __FILESYSTEM_H__

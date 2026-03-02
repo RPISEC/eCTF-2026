@@ -25,6 +25,7 @@ OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/filesystem.so \
     $(BUILDDIR)/commands.so \
     $(BUILDDIR)/simple_trng.so \
+    $(BUILDDIR)/simple_crypto.so \
     $(BUILDDIR)/hardware_crypto.so \
     $(BUILDDIR)/wallet.so
 
