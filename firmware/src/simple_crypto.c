@@ -39,35 +39,32 @@
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *auth_tag, uint8_t *ciphertext) {
-    Aes aes; // Context for encryption
+int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *iv,
+                uint8_t *auth_tag, uint8_t *aad, size_t aad_len,
+                uint8_t *ciphertext) {
+    Aes *aes; // Context for encryption
     int ret; // Library result
 
     // Ensure valid length
     if (len <= 0 || len % BLOCK_SIZE)
         return -1;
 
-    ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
+    aes = wc_AesNew(NULL, HARDWARE_CRYPTO_DEVICE_ID, &ret);
     if (ret != 0) {
-        wc_AesFree(&aes);
+        wc_AesDelete(aes, &aes);
         return ret;
     }
     // Set the key for encryption
-    ret = wc_AesGcmSetKey(&aes, key, AES_KEY_SIZE);
+    ret = wc_AesGcmSetKey(aes, key, AES_KEY_SIZE);
     if (ret != 0) {
-        wc_AesFree(&aes);
+        wc_AesDelete(aes, &aes);
         return ret;
     }
 
-    ret = wc_AesGcmEncrypt(
-        &aes,
-        ciphertext,
-        plaintext,  len,
-        iv,         AES_IV_SIZE,
-        auth_tag,   AES_AUTH_TAG_SIZE,
-        NULL,       0
-    );
-    wc_AesFree(&aes);
+    ret = wc_AesGcmEncrypt(aes, ciphertext, plaintext, len, iv, AES_IV_SIZE,
+                           auth_tag, AES_AUTH_TAG_SIZE, aad, aad_len);
+    // wc_AesFree(&aes);
+    wc_AesDelete(aes, &aes);
     if (ret != 0)
         return ret;
     return 0;
@@ -90,35 +87,31 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *auth_tag, uint8_t *plaintext) {
-    Aes aes; // Context for encryption
+int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *iv,
+                uint8_t *auth_tag, uint8_t *aad, size_t aad_len,
+                uint8_t *plaintext) {
+    Aes *aes; // Context for encryption
     int ret; // Library result
 
     // Ensure valid length
     if (len <= 0 || len % BLOCK_SIZE)
         return -1;
 
-    ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
+    aes = wc_AesNew(NULL, HARDWARE_CRYPTO_DEVICE_ID, &ret);
     if (ret != 0) {
-        wc_AesFree(&aes);
+        wc_AesDelete(aes, &aes);
         return ret;
     }
     // Set the key for encryption
-    ret = wc_AesGcmSetKey(&aes, key, AES_KEY_SIZE);
+    ret = wc_AesGcmSetKey(aes, key, AES_KEY_SIZE);
     if (ret != 0) {
-        wc_AesFree(&aes);
+        wc_AesDelete(aes, &aes);
         return ret;
     }
 
-    ret = wc_AesGcmDecrypt(
-        &aes,
-        plaintext,
-        ciphertext,  len,
-        iv,         AES_IV_SIZE,
-        auth_tag,   AES_AUTH_TAG_SIZE,
-        NULL,       0
-    );
-    wc_AesFree(&aes);
+    ret = wc_AesGcmDecrypt(aes, plaintext, ciphertext, len, iv, AES_IV_SIZE,
+                           auth_tag, AES_AUTH_TAG_SIZE, aad, aad_len);
+    wc_AesDelete(aes, &aes);
     if (ret != 0)
         return ret;
     return 0;

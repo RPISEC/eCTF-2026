@@ -6,7 +6,8 @@
 #include <wolfssl/wolfcrypt/cryptocb.h>
 
 // HARDWARE_CRYPTO_DEVICE_ID can be any unique positive integer, but must be used consistently in wolfcrypt init functions
-#define HARDWARE_CRYPTO_DEVICE_ID 1
+#define HARDWARE_CRYPTO_DEVICE_ID INVALID_DEVID
+// #define HARDWARE_CRYPTO_DEVICE_ID 1
 
 // size in bytes
 #define AES_AUTH_TAG_SIZE 16

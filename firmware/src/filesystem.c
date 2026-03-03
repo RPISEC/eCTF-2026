@@ -109,7 +109,7 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
         // Encrypt
         int ret = encrypt_sym(src->contents,
             src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE),
-            key, src->iv, src->auth_tag, src->contents); // Encrypt in place
+            key, src->iv, src->auth_tag, NULL, 0, src->contents); // Encrypt in place
         if (ret != 0)
             return ret;
         print_debug("encrypted");
@@ -155,7 +155,7 @@ int read_file(slot_t slot, file_t *dest, uint8_t* key) {
     // Otherwise, decrypt it like normal.
     int ret = decrypt_sym(dest->contents,
         dest->contents_len + (AES_BLOCK_SIZE - dest->contents_len % AES_BLOCK_SIZE),
-        key, dest->iv, dest->auth_tag, dest->contents); // Decrypt in place
+        key, dest->iv, dest->auth_tag, NULL, 0, dest->contents); // Decrypt in place
     if (ret != 0)
         return ret;
     return 0;
