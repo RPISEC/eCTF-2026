@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "hardware_crypto.h"
+#include "ti_msp_dl_config.h"
 
 
 
@@ -52,7 +53,7 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8
         return ret;
     }
     // Set the key for encryption
-    ret = wc_AesGcmSetKey(&aes, key, KEY_SIZE);
+    ret = wc_AesGcmSetKey(&aes, key, AES_KEY_SIZE);
     if (ret != 0) {
         wc_AesFree(&aes);
         return ret;
@@ -62,7 +63,7 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8
         &aes,
         ciphertext,
         plaintext,  len,
-        iv,         IV_SIZE,
+        iv,         AES_IV_SIZE,
         auth_tag,   AES_AUTH_TAG_SIZE,
         NULL,       0
     );
@@ -103,7 +104,7 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint
         return ret;
     }
     // Set the key for encryption
-    ret = wc_AesGcmSetKey(&aes, key, KEY_SIZE);
+    ret = wc_AesGcmSetKey(&aes, key, AES_KEY_SIZE);
     if (ret != 0) {
         wc_AesFree(&aes);
         return ret;
@@ -113,7 +114,7 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint
         &aes,
         plaintext,
         ciphertext,  len,
-        iv,         IV_SIZE,
+        iv,         AES_IV_SIZE,
         auth_tag,   AES_AUTH_TAG_SIZE,
         NULL,       0
     );

@@ -10,8 +10,7 @@
 
 // size in bytes
 #define AES_AUTH_TAG_SIZE 16
-#define KEY_SIZE 32
-#define IV_SIZE 12
+#define AES_IV_SIZE 12
 
 bool init_hardware_crypto(void);
 int callbackHardwareCrypto(int devId, wc_CryptoInfo* info, void* ctx);

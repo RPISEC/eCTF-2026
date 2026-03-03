@@ -112,7 +112,7 @@ int read(uint16_t pkt_len, uint8_t *buf) {
         print_error("Failed to read file");
         return -1;
     }
-    memset(key, 0, KEY_SIZE);
+    memset(key, 0, AES_KEY_SIZE);
     // copy structure of the persistent file
     memcpy(file_info.name, &curr_file.name, strlen(curr_file.name));
     memcpy(file_info.contents, &curr_file.contents, curr_file.contents_len);
@@ -177,7 +177,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         print_error("Error storing file");
         return -1;
     }
-    memset(key, 0, KEY_SIZE);
+    memset(key, 0, AES_KEY_SIZE);
 
     print_debug("File written");
 
@@ -237,7 +237,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         print_error("Writing received file failed");
         return -1;
     }
-    memset(key, 0, KEY_SIZE);
+    memset(key, 0, AES_KEY_SIZE);
     // empty success message
     write_packet(CONTROL_INTERFACE, RECEIVE_MSG, NULL, 0);
     return 0;

@@ -68,7 +68,7 @@ int create_file(
     dest->in_use = FILE_IN_USE;
     dest->group_id = group_id;
     dest->contents_len = contents_len;
-    for (int i = 0; i < IV_SIZE / 4; i++) {
+    for (int i = 0; i < AES_IV_SIZE / 4; i++) {
         uint32_t rand = trng_get_u32();
         memcpy(&dest->iv[i*4], &rand, 4);
     }
@@ -100,7 +100,7 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
     // when it is already encrypted.
     if (key != NULL) {
         // Generate random IV
-        for (int i = 0; i < IV_SIZE / 4; i++) {
+        for (int i = 0; i < AES_IV_SIZE / 4; i++) {
             uint32_t rand = trng_get_u32();
             memcpy(&src->iv[i*4], &rand, 4);
         }
@@ -115,15 +115,6 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
         print_debug("encrypted");
     }
 
-    char debug_buf[128];
-    char* ptr = debug_buf;
-    ptr += snprintf(ptr, 128, "Auth tag: ");
-    for (int i = 0; i < AES_AUTH_TAG_SIZE; i++) {
-        // snprintf returns the number of characters written
-        ptr += snprintf(ptr, 3, "%02X", src->auth_tag[i]);
-    }
-    print_debug(debug_buf);
-
     // Update the FAT for the new file
     memcpy(&FILE_ALLOCATION_TABLE[slot].uuid, uuid, UUID_SIZE);
     FILE_ALLOCATION_TABLE[slot].flash_addr = flash_addr;
@@ -134,9 +125,6 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
     for (int i = 0; i < FILE_PAGE_COUNT; i++) {
         flash_simple_erase_page(flash_addr + (FLASH_PAGE_SIZE * i));
     }
-
-    // char debug_buf[128];
-    // snprintf(debug_buf, 128, "Wrote debug header:")
 
     // now write the file
     return flash_simple_write(FILE_ALLOCATION_TABLE[slot].flash_addr, src, length);
@@ -159,15 +147,6 @@ int read_file(slot_t slot, file_t *dest, uint8_t* key) {
         return -1;
     }
     flash_simple_read(flash_addr, dest, file_size);
-
-    char debug_buf[128];
-    char* ptr = debug_buf;
-    ptr += snprintf(ptr, 128, "Auth tag: ");
-    for (int i = 0; i < AES_AUTH_TAG_SIZE; i++) {
-        // snprintf returns the number of characters written
-        ptr += snprintf(ptr, 3, "%02X", dest->auth_tag[i]);
-    }
-    print_debug(debug_buf);
 
     // If no key is provided, return it still encrypted. This is useful for recieve.
     if (key == NULL) {
