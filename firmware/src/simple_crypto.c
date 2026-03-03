@@ -31,15 +31,16 @@
  *          the key to use for encryption
  * @param iv A pointer to a buffer of length IV_SIZE containing
  *          the iv to use for encryption
+ * @param auth_tag A pointer to a buffer of length AES_AUTH_TAG_SIZE where the
+ *          resulting auth tag will be written to
  * @param ciphertext A pointer to a buffer of length len where the resulting
  *          ciphertext will be written to
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *ciphertext) {
+int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *auth_tag, uint8_t *ciphertext) {
     Aes aes; // Context for encryption
     int ret; // Library result
-    uint8_t auth_tag[AES_AUTH_TAG_SIZE];
 
     // Ensure valid length
     if (len <= 0 || len % BLOCK_SIZE)
@@ -81,15 +82,16 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t* iv, uint8
  *          the key to use for decryption
  * @param iv A pointer to a buffer of length IV_SIZE containing
  *          the iv to use for encryption
+ * @param auth_tag A pointer to a buffer of length AES_AUTH_TAG_SIZE where the
+ *          resulting auth tag will be written to
  * @param plaintext A pointer to a buffer of length len where the resulting
  *          plaintext will be written to
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *plaintext) {
+int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint8_t *auth_tag, uint8_t *plaintext) {
     Aes aes; // Context for encryption
     int ret; // Library result
-    uint8_t auth_tag[AES_AUTH_TAG_SIZE];
 
     // Ensure valid length
     if (len <= 0 || len % BLOCK_SIZE)
@@ -97,8 +99,8 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t* iv, uint
 
     ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
     if (ret != 0) {
-        return ret;
         wc_AesFree(&aes);
+        return ret;
     }
     // Set the key for encryption
     ret = wc_AesGcmSetKey(&aes, key, KEY_SIZE);

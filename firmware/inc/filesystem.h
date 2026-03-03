@@ -97,6 +97,7 @@ typedef struct {
     char name[MAX_NAME_SIZE];
     uint16_t contents_len;
     uint8_t iv[IV_SIZE];
+    uint8_t auth_tag[AES_AUTH_TAG_SIZE];
     uint8_t contents[MAX_CONTENTS_SIZE]; // encrypted
 } file_t;
 

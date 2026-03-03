@@ -96,21 +96,33 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
     // Length, rounded to nearest AES block size
     length = FILE_TOTAL_SIZE(src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE));
     
-    // Generate random IV
-    for (int i = 0; i < IV_SIZE / 4; i++) {
-        uint32_t rand = trng_get_u32();
-        memcpy(&src->iv[i*4], &rand, 4);
+    // If no key is provided, write it unencrypted. This is useful for recieve,
+    // when it is already encrypted.
+    if (key != NULL) {
+        // Generate random IV
+        for (int i = 0; i < IV_SIZE / 4; i++) {
+            uint32_t rand = trng_get_u32();
+            memcpy(&src->iv[i*4], &rand, 4);
+        }
+        print_debug("iv generated");
+
+        // Encrypt
+        int ret = encrypt_sym(src->contents,
+            src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE),
+            key, src->iv, src->auth_tag, src->contents); // Encrypt in place
+        if (ret != 0)
+            return ret;
+        print_debug("encrypted");
     }
 
-    print_debug("iv generated");
-
-    // Encrypt the contents
-    int ret = encrypt_sym(src->contents,
-        src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE),
-        key, src->iv, src->contents); // Encrypt in place
-    if (ret != 0)
-        return ret;
-    print_debug("encrypted");
+    char debug_buf[128];
+    char* ptr = debug_buf;
+    ptr += snprintf(ptr, 128, "Auth tag: ");
+    for (int i = 0; i < AES_AUTH_TAG_SIZE; i++) {
+        // snprintf returns the number of characters written
+        ptr += snprintf(ptr, 3, "%02X", src->auth_tag[i]);
+    }
+    print_debug(debug_buf);
 
     // Update the FAT for the new file
     memcpy(&FILE_ALLOCATION_TABLE[slot].uuid, uuid, UUID_SIZE);
@@ -122,6 +134,9 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
     for (int i = 0; i < FILE_PAGE_COUNT; i++) {
         flash_simple_erase_page(flash_addr + (FLASH_PAGE_SIZE * i));
     }
+
+    // char debug_buf[128];
+    // snprintf(debug_buf, 128, "Wrote debug header:")
 
     // now write the file
     return flash_simple_write(FILE_ALLOCATION_TABLE[slot].flash_addr, src, length);
@@ -145,13 +160,23 @@ int read_file(slot_t slot, file_t *dest, uint8_t* key) {
     }
     flash_simple_read(flash_addr, dest, file_size);
 
-    get_file_headers(slot, dest);
+    char debug_buf[128];
+    char* ptr = debug_buf;
+    ptr += snprintf(ptr, 128, "Auth tag: ");
+    for (int i = 0; i < AES_AUTH_TAG_SIZE; i++) {
+        // snprintf returns the number of characters written
+        ptr += snprintf(ptr, 3, "%02X", dest->auth_tag[i]);
+    }
+    print_debug(debug_buf);
 
-    // Decrypt the contents
+    // If no key is provided, return it still encrypted. This is useful for recieve.
     if (key == NULL) {
         return 0;
     }
-    int ret = decrypt_sym(dest->contents, dest->contents_len + (AES_BLOCK_SIZE - dest->contents_len % AES_BLOCK_SIZE), key, dest->iv, dest->contents); // Decrypt in place
+    // Otherwise, decrypt it like normal.
+    int ret = decrypt_sym(dest->contents,
+        dest->contents_len + (AES_BLOCK_SIZE - dest->contents_len % AES_BLOCK_SIZE),
+        key, dest->iv, dest->auth_tag, dest->contents); // Decrypt in place
     if (ret != 0)
         return ret;
     return 0;
