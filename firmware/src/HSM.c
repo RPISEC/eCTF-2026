@@ -60,8 +60,9 @@ void init() {
     SYSCFG_DL_init();
 
     // need to initialize wolfcrypt before initializing wolfcrypt-dependent components
-    wolfCrypt_Init();
-    print_debug("wolfCrypt initialized\n");
+    if (wolfCrypt_Init() < 0) {
+        print_debug("wolfcrypt init error");
+    };
 
     if(!trng_init()) {
         print_debug("trng init error");
