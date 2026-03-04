@@ -14,7 +14,6 @@
 #ifndef __COMMANDS_H__
 #define __COMMANDS_H__
 
-#include "security.h"
 #include "stdint.h"
 #include "simple_flash.h"
 #include "filesystem.h"
@@ -75,7 +74,6 @@ typedef struct {
 
 typedef struct {
     slot_t slot;
-    group_permission_t permissions[MAX_PERMS];
 } receive_request_t;
 
 typedef struct {

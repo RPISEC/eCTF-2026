@@ -34,17 +34,17 @@ static file_t current_file;
  */
 void generate_list_files(list_response_t *file_list) {
     file_list->n_files = 0;
-    file_t temp_file;
+    file_headers_t temp_headers;
 
     // Loop through all files on the system
     for (uint8_t i = 0; i < MAX_FILE_COUNT; i++) {
         // Check if the file is in use
         if (is_slot_in_use(i)) {
-            get_file_headers(i, &temp_file);
+            get_file_headers(i, &temp_headers);
 
             file_list->metadata[file_list->n_files].slot = i;
-            file_list->metadata[file_list->n_files].group_id = temp_file.group_id;
-            strcpy(file_list->metadata[file_list->n_files].name, (char *)&temp_file.name);
+            file_list->metadata[file_list->n_files].group_id = temp_headers.group_id;
+            strcpy(file_list->metadata[file_list->n_files].name, (char *)&temp_headers.name);
             file_list->n_files++;
         }
     }
@@ -64,7 +64,7 @@ void generate_list_files(list_response_t *file_list) {
 */
 int list(uint16_t pkt_len, uint8_t *buf) {
     list_command_t *command = (list_command_t*)buf;
-    list_response_t file_list;
+    static list_response_t file_list;
 
     memset(&file_list, 0, sizeof(file_list));
 
@@ -92,8 +92,7 @@ int list(uint16_t pkt_len, uint8_t *buf) {
 */
 int read(uint16_t pkt_len, uint8_t *buf) {
     read_command_t *command = (read_command_t*)buf;
-    read_response_t file_info;
-    file_t curr_file;
+    file_t *curr_file;
     key32_t key;
 
     if (wallet_unlock(command->pin)) {
@@ -101,33 +100,51 @@ int read(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
-    get_file_headers(command->slot, &curr_file);
-    int ret = get_k_storage(&key, curr_file.group_id);
+
+    curr_file = malloc(sizeof(file_t));
+    if (curr_file == NULL) {
+        print_error("Insufficient memory for file");
+        return -1;
+    }
+
+    get_file_headers(command->slot, &curr_file->headers);
+
+    if (!wallet_has_perms(curr_file->headers.group_id, PERM_R)) {
+        print_error("Invalid permission");
+        free(curr_file);
+        return -1;
+    }
+
+    int ret = get_k_storage(&key, curr_file->headers.group_id);
+    if (ret < 0) {
+        print_error("Invalid key");
+        free(curr_file);
+        return -1;
+    }
+
     wallet_lock();
-
-    // zeroizing memory is a pretty good practice
-    memset(&file_info, 0, sizeof(read_response_t));
-
-    if (read_file(command->slot, &curr_file, key) < 0) {
+    ret = read_file(command->slot, curr_file, key);
+    if (ret < 0) {
+        print_hex_debug(&ret, sizeof(ret));
         print_error("Failed to read file");
+        free(curr_file);
         return -1;
     }
     memset(key, 0, AES_KEY_SIZE);
-    // copy structure of the persistent file
-    memcpy(file_info.name, &curr_file.name, strlen(curr_file.name));
-    memcpy(file_info.contents, &curr_file.contents, curr_file.contents_len);
 
-    if (!validate_permission(curr_file.group_id, PERM_READ)) {
-        print_error("Invalid permission");
-        return -1;
-    }
+
+    /* To save memory, we re-use the space for curr_file to store the packet.
+     * This is safe as long as the packet struct matches a contiguous section of
+     * the file struct. */
+    const read_response_t *file_info = (read_response_t *)&curr_file->headers.name;
+    pkt_len_t length = MAX_NAME_SIZE + curr_file->headers.contents_len;
 
     // write a success message with the file information
-    pkt_len_t length = MAX_NAME_SIZE + curr_file.contents_len;
-    write_packet(CONTROL_INTERFACE, READ_MSG, &file_info, length);
+    write_packet(CONTROL_INTERFACE, READ_MSG, file_info, length);
+
+    free(curr_file);
     return 0;
 }
-
 
 /** @brief Perform the write operation
  *
@@ -139,7 +156,7 @@ int read(uint16_t pkt_len, uint8_t *buf) {
 int write(uint16_t pkt_len, uint8_t *buf) {
     write_command_t *command = (write_command_t*)buf;
     int ret;
-    file_t curr_file;
+    file_t *curr_file;
     key32_t key;
     char debug_buffer[64];
 
@@ -162,8 +179,14 @@ int write(uint16_t pkt_len, uint8_t *buf) {
 
     print_debug("Permission validated");
 
+    curr_file = malloc(sizeof(file_t));
+    if (curr_file == NULL) {
+        print_error("Insufficient memory for file");
+        return -1;
+    }
+
     create_file(
-        &curr_file,
+        curr_file,
         command->group_id,
         command->name,
         command->contents_len,
@@ -173,8 +196,9 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     print_debug("File created");
 
     // Store the file persistently
-    if (write_file(command->slot, &curr_file, command->uuid, key) < 0) {
+    if (write_file(command->slot, curr_file, command->uuid, key) < 0) {
         print_error("Error storing file");
+        free(curr_file);
         return -1;
     }
     memset(key, 0, AES_KEY_SIZE);
@@ -183,6 +207,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
 
     // Success message with an empty body
     write_packet(CONTROL_INTERFACE, WRITE_MSG, NULL, 0);
+    free(curr_file);
     return 0;
 }
 
@@ -215,7 +240,6 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     // prep request to neighbor
     request.slot = command->read_slot;
-    // memcpy(&request.permissions, &global_permissions, sizeof(group_permission_t) * MAX_PERMS);
 
     // request the file from the neighboring device
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&request, sizeof(receive_request_t));
@@ -230,7 +254,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
-    ret = get_k_storage(&key, recv_resp.file.group_id);
+    ret = get_k_storage(&key, recv_resp.file.headers.group_id);
 
     // write that file into the file system
     if (write_file(command->write_slot, &recv_resp.file, recv_resp.uuid, key) < 0) {

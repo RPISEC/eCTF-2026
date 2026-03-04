@@ -45,9 +45,9 @@ int init_fs() {
  * @return True if the slot is in use. False otherwise.
 */
 bool is_slot_in_use(slot_t slot) {
-    file_t temp_file;
-    get_file_headers(slot, &temp_file);
-    return temp_file.in_use == FILE_IN_USE;
+    file_headers_t temp_file_headers;
+    get_file_headers(slot, &temp_file_headers);
+    return temp_file_headers.in_use == FILE_IN_USE;
 }
 
 /** @brief Create a new file object in memory
@@ -65,16 +65,16 @@ int create_file(
 ) {
     memset(dest, 0, sizeof(file_t));
 
-    dest->in_use = FILE_IN_USE;
-    dest->group_id = group_id;
-    dest->contents_len = contents_len;
+    dest->headers.in_use = FILE_IN_USE;
+    dest->headers.group_id = group_id;
+    dest->headers.contents_len = contents_len;
     for (int i = 0; i < AES_IV_SIZE / 4; i++) {
         uint32_t rand = trng_get_u32();
-        memcpy(&dest->iv[i*4], &rand, 4);
+        memcpy(&dest->headers.iv[i*4], &rand, 4);
     }
 
     // name must be null terminated, and the contents are defined by a length
-    strcpy(dest->name, name);
+    strcpy(dest->headers.name, name);
     memcpy(dest->contents, contents, contents_len);
 
     return 0;
@@ -94,22 +94,22 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
 
     flash_addr = FILE_START_PAGE_FROM_SLOT(slot);
     // Length, rounded to nearest AES block size
-    length = FILE_TOTAL_SIZE(src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE));
-    
-    // If no key is provided, write it unencrypted. This is useful for recieve,
+    length = FILE_TOTAL_SIZE(src->headers.contents_len);
+
+    // If no key is provided, write it unencrypted. This is useful for receive,
     // when it is already encrypted.
     if (key != NULL) {
         // Generate random IV
         for (int i = 0; i < AES_IV_SIZE / 4; i++) {
             uint32_t rand = trng_get_u32();
-            memcpy(&src->iv[i*4], &rand, 4);
+            memcpy(&src->headers.iv[i*4], &rand, 4);
         }
         print_debug("iv generated");
 
         // Encrypt
-        int ret = encrypt_sym(src->contents,
-            src->contents_len + (AES_BLOCK_SIZE - src->contents_len % AES_BLOCK_SIZE),
-            key, src->iv, src->auth_tag, NULL, 0, src->contents); // Encrypt in place
+        int ret = encrypt_sym(src->contents, src->headers.contents_len, key,
+                              src->headers.iv, src->headers.auth_tag, NULL, 0,
+                              src->contents); // Encrypt in place
         if (ret != 0)
             return ret;
         print_debug("encrypted");
@@ -148,14 +148,14 @@ int read_file(slot_t slot, file_t *dest, uint8_t* key) {
     }
     flash_simple_read(flash_addr, dest, file_size);
 
-    // If no key is provided, return it still encrypted. This is useful for recieve.
+    // If no key is provided, return it still encrypted. This is useful for receive.
     if (key == NULL) {
         return 0;
     }
     // Otherwise, decrypt it like normal.
-    int ret = decrypt_sym(dest->contents,
-        dest->contents_len + (AES_BLOCK_SIZE - dest->contents_len % AES_BLOCK_SIZE),
-        key, dest->iv, dest->auth_tag, NULL, 0, dest->contents); // Decrypt in place
+    int ret = decrypt_sym(dest->contents, dest->headers.contents_len, key,
+                          dest->headers.iv, dest->headers.auth_tag, NULL, 0,
+                          dest->contents); // Decrypt in place
     if (ret != 0)
         return ret;
     return 0;
@@ -175,7 +175,7 @@ const filesystem_entry_t *get_file_metadata(slot_t slot) {
  *         but the contents are garbage data and should not be accessed.
  *  @param slot The slot to get headers for
 */
-const int get_file_headers(slot_t slot, file_t *file_headers) {
+const int get_file_headers(slot_t slot, file_headers_t *file_headers) {
     int flash_addr, file_size;
 
     flash_addr = FILE_ALLOCATION_TABLE[slot].flash_addr;

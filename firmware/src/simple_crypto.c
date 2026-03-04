@@ -13,7 +13,6 @@
 
 
 #include "simple_crypto.h"
-#include "security.h"
 #include <stdint.h>
 #include <string.h>
 #include "hardware_crypto.h"

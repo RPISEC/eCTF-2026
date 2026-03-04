@@ -91,13 +91,17 @@ The reference design allocates files for each slot as follows:
 
 #define FILE_IN_USE 0xdeadbeef
 // used to actually define the file object
-typedef struct {
-    uint32_t in_use;  // FILE_IN_USE if in use
+typedef struct __attribute__((packed)) {
+    uint32_t in_use; // FILE_IN_USE if in use
     group_id_t group_id;
-    char name[MAX_NAME_SIZE];
     uint16_t contents_len;
     uint8_t iv[AES_IV_SIZE];
     uint8_t auth_tag[AES_AUTH_TAG_SIZE];
+    char name[MAX_NAME_SIZE]; // must be at the end of the struct to match read packet format
+} file_headers_t;
+
+typedef struct __attribute__((packed)) {
+    file_headers_t headers;
     uint8_t contents[MAX_CONTENTS_SIZE]; // encrypted
 } file_t;
 
@@ -158,6 +162,6 @@ const filesystem_entry_t *get_file_metadata(slot_t slot);
  * @param slot The slot to get headers for.
  * 
  */
-const int get_file_headers(slot_t slot, file_t *file_headers);
+const int get_file_headers(slot_t slot, file_headers_t *file_headers);
 
 #endif // __FILESYSTEM_H__
