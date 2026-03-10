@@ -51,6 +51,8 @@ OBJECTS += $(WOLFSSL_INC)/wc_port.o $(WOLFSSL_INC)/pwdbased.o
 OBJECTS += $(WOLFSSL_INC)/memory.o $(WOLFSSL_INC)/hash.o
 OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
 OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
+OBJECTS += $(WOLFSSL_INC)/ed25519.o $(WOLFSSL_INC)/sha512.o
+OBJECTS += $(WOLFSSL_INC)/ge_low_mem.o $(WOLFSSL_INC)/fe_low_mem.o
 
 # we also need random.o for TRNG testing
 ifeq ($(TRNG_TEST), 1)

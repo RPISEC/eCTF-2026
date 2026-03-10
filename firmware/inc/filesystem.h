@@ -81,9 +81,8 @@ The reference design allocates files for each slot as follows:
 // Calculate the total size of a file in flash, including its metadata
 #define FILE_TOTAL_SIZE(len) len + offsetof(file_t, contents)
 
-// Each file will be 9 pages in size. 8 pages for the file contents + 1 page for
-// metadata
-#define FILE_PAGE_COUNT 9
+// Each file will take up a whole number of pages
+#define FILE_PAGE_COUNT ((sizeof(file_t) + (FLASH_PAGE_SIZE - 1)) / FLASH_PAGE_SIZE)
 #define STORED_FILE_SIZE FLASH_PAGE_SIZE*FILE_PAGE_COUNT
 
 // first flash address for files
@@ -103,6 +102,7 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     file_headers_t headers;
     uint8_t contents[MAX_CONTENTS_SIZE]; // encrypted
+    uint8_t signature[64];
 } file_t;
 
 /** @brief Initialize the filesystem
@@ -128,7 +128,26 @@ bool is_slot_in_use(slot_t slot);
 */
 int create_file(file_t *dest, group_id_t group_id, char *name, uint16_t contents_len, uint8_t *contents);
 
-/** @brief Create a new file object in memory
+/** @brief Encrypt a file in memory
+ *
+ *  @param file The file to encrypt
+ *  @param k_storage The AES 256-bit key to use for encryption
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int encrypt_file(file_t *file, const uint8_t *k_storage);
+
+/** @brief Sign a file in memory
+ *
+ *  @param file The file to sign
+ *  @param w_priv The ED25519 256-bit private key
+ *  @param w_pub The ED25519 256-bit public key
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub);
+
+/** @brief Create a new file object on flash
  *
  *  @param slot The slot to write the file to
  *  @param src The sourc file to store
@@ -136,7 +155,7 @@ int create_file(file_t *dest, group_id_t group_id, char *name, uint16_t contents
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key);
+int write_file(slot_t slot, file_t *src, const uint8_t *uuid);
 
 /** @brief Read a file from persistent storage into memory
  *

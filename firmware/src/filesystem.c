@@ -14,10 +14,12 @@
 #include <stdint.h>
 
 #include "filesystem.h"
+#include "simple_crypto.h"
 #include "simple_flash.h"
 #include "simple_trng.h"
-#include "simple_crypto.h"
 #include "host_messaging.h" // DEBUG REMOVE ME
+#include "wallet.h"
+#include "wolfssl/wolfcrypt/ed25519.h"
 
 int load_fat() {
     flash_simple_read((uint32_t)_FLASH_FAT_START, FILE_ALLOCATION_TABLE, sizeof(FILE_ALLOCATION_TABLE));
@@ -68,10 +70,6 @@ int create_file(
     dest->headers.in_use = FILE_IN_USE;
     dest->headers.group_id = group_id;
     dest->headers.contents_len = contents_len;
-    for (int i = 0; i < AES_IV_SIZE / 4; i++) {
-        uint32_t rand = trng_get_u32();
-        memcpy(&dest->headers.iv[i*4], &rand, 4);
-    }
 
     // name must be null terminated, and the contents are defined by a length
     strcpy(dest->headers.name, name);
@@ -80,40 +78,92 @@ int create_file(
     return 0;
 }
 
-/** @brief Create a new file object in memory
+/** @brief Encrypt a file in memory
+ *
+ *  @param file The file to encrypt
+ *  @param k_storage The AES 256-bit key to use for encryption
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int encrypt_file(file_t *file, const uint8_t *k_storage) {
+    // Generate random IV
+    for (int i = 0; i < AES_IV_SIZE / 4; i++) {
+        uint32_t rand = trng_get_u32();
+        if (rand == 0) {
+            return -1;
+        }
+        memcpy(&file->headers.iv[i * 4], &rand, 4);
+    }
+    print_debug("iv generated");
+
+    // Encrypt
+    int ret = encrypt_sym(file->contents, file->headers.contents_len, k_storage,
+                          file->headers.iv, file->headers.auth_tag, NULL, 0,
+                          file->contents); // Encrypt in place
+    if (ret < 0) {
+        return -2;
+    }
+
+    return 0;
+}
+
+/** @brief Sign a file in memory
+ *
+ *  @param file The file to sign
+ *  @param w_priv The ED25519 256-bit private key
+ *  @param w_pub The ED25519 256-bit public key
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
+    ed25519_key *key;
+    uint32_t sign_len;
+    int ret;
+
+    key = malloc(sizeof(ed25519_key));
+    if (key == NULL) {
+        print_error("insufficient memory for ed25519 key");
+        return -1;
+    }
+    ret = wc_ed25519_import_private_key(w_priv, sizeof(key32_t), w_pub, sizeof(key32_t), key);
+    if (ret < 0) {
+        print_error("failed to import w_priv");
+        free(key);
+        return -2;
+    }
+
+    sign_len = sizeof(file->signature);
+    ret = wc_ed25519_sign_msg((uint8_t *)file, sizeof(file_t) - 64,
+                              file->signature, &sign_len, key);
+    if (sign_len != 64) {
+        print_error("incorrect signature length");
+    }
+
+    if (ret < 0) {
+        print_hex_debug(&ret, sizeof(ret));
+        print_error("failed to sign");
+        free(key);
+        return -3;
+    }
+
+    free(key);
+    return 0;
+}
+
+/** @brief Create a new file object on flash
  *
  *  @param slot The slot to write the file to
  *  @param src The sourc file to store
  *  @param uuid The UUID to store in the FAT
- *  @param key The AES key to encrypt with. An IV is generated.
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
+int write_file(slot_t slot, file_t *src, const uint8_t *uuid) {
     unsigned int length, flash_addr;
+    int ret;
 
     flash_addr = FILE_START_PAGE_FROM_SLOT(slot);
-    // Length, rounded to nearest AES block size
     length = FILE_TOTAL_SIZE(src->headers.contents_len);
-
-    // If no key is provided, write it unencrypted. This is useful for receive,
-    // when it is already encrypted.
-    if (key != NULL) {
-        // Generate random IV
-        for (int i = 0; i < AES_IV_SIZE / 4; i++) {
-            uint32_t rand = trng_get_u32();
-            memcpy(&src->headers.iv[i*4], &rand, 4);
-        }
-        print_debug("iv generated");
-
-        // Encrypt
-        int ret = encrypt_sym(src->contents, src->headers.contents_len, key,
-                              src->headers.iv, src->headers.auth_tag, NULL, 0,
-                              src->contents); // Encrypt in place
-        if (ret != 0)
-            return ret;
-        print_debug("encrypted");
-    }
 
     // Update the FAT for the new file
     memcpy(&FILE_ALLOCATION_TABLE[slot].uuid, uuid, UUID_SIZE);
@@ -127,7 +177,7 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid, uint8_t* key) {
     }
 
     // now write the file
-    return flash_simple_write(FILE_ALLOCATION_TABLE[slot].flash_addr, src, length);
+    return flash_simple_write(FILE_ALLOCATION_TABLE[slot].flash_addr, src, sizeof(file_t));
 }
 
 /** @brief Read a file from persistent storage into memory
@@ -183,6 +233,6 @@ const int get_file_headers(slot_t slot, file_headers_t *file_headers) {
     if (flash_addr < 0 || file_size < 0) {
         return -1;
     }
-    flash_simple_read(flash_addr, file_headers, sizeof(file_t) - MAX_CONTENTS_SIZE);
+    flash_simple_read(flash_addr, file_headers, sizeof(file_headers_t));
     return 0;
 }

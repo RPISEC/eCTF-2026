@@ -157,25 +157,27 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     write_command_t *command = (write_command_t*)buf;
     int ret;
     file_t *curr_file;
-    key32_t key;
-    char debug_buffer[64];
+    key32_t k_storage, w_priv, w_pub;
 
     if (wallet_unlock(command->pin)) {
-        snprintf(debug_buffer, 32, "Ret: %d", ret);
-        print_debug(debug_buffer);
         print_error("Invalid pin");
         return -1;
     }
 
-    print_debug("Correct pin");
-
-    ret = get_k_storage(&key, command->group_id);
-    wallet_lock();
-
-    if (!wallet_has_perms(command->group_id, PERM_W)) {
+    /* get functions already check permissions */
+    ret = get_w_priv(&w_priv, command->group_id);
+    if (ret < 0) {
         print_error("Invalid permission");
-        return -1;
     }
+
+    ret = get_w_pub(&w_pub, command->group_id);
+
+    ret = get_k_storage(&k_storage, command->group_id);
+    if (ret < 0) {
+        print_error("Invalid permission");
+    }
+
+    wallet_lock();
 
     print_debug("Permission validated");
 
@@ -195,13 +197,27 @@ int write(uint16_t pkt_len, uint8_t *buf) {
 
     print_debug("File created");
 
-    // Store the file persistently
-    if (write_file(command->slot, curr_file, command->uuid, key) < 0) {
-        print_error("Error storing file");
+    if (encrypt_file(curr_file, k_storage) < 0) {
+        print_error("Error encrypting file");
         free(curr_file);
         return -1;
     }
-    memset(key, 0, AES_KEY_SIZE);
+
+    if (sign_file(curr_file, w_priv, w_pub) < 0) {
+        print_error("Error storing file");
+        free(curr_file);
+        return -2;
+    }
+
+    // Store the file persistently
+    if (write_file(command->slot, curr_file, command->uuid) < 0) {
+        print_error("Error storing file");
+        free(curr_file);
+        return -3;
+    }
+
+    memset(k_storage, 0, sizeof(key32_t));
+    memset(w_priv, 0, sizeof(key32_t));
 
     print_debug("File written");
 
@@ -225,7 +241,6 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     receive_response_t recv_resp;
     msg_type_t cmd;
     uint16_t len_recv_msg;
-    key32_t key;
     int ret;
 
     if (wallet_unlock(command->pin)) {
@@ -254,14 +269,11 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
-    ret = get_k_storage(&key, recv_resp.file.headers.group_id);
-
     // write that file into the file system
-    if (write_file(command->write_slot, &recv_resp.file, recv_resp.uuid, key) < 0) {
+    if (write_file(command->write_slot, &recv_resp.file, recv_resp.uuid) < 0) {
         print_error("Writing received file failed");
         return -1;
     }
-    memset(key, 0, AES_KEY_SIZE);
     // empty success message
     write_packet(CONTROL_INTERFACE, RECEIVE_MSG, NULL, 0);
     return 0;

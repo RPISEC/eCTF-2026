@@ -38,9 +38,9 @@
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *iv,
-                uint8_t *auth_tag, uint8_t *aad, size_t aad_len,
-                uint8_t *ciphertext) {
+int encrypt_sym(const uint8_t *plaintext, size_t len, const uint8_t *key,
+                const uint8_t *iv, uint8_t *auth_tag, const uint8_t *aad,
+                size_t aad_len, uint8_t *ciphertext) {
     Aes *aes; // Context for encryption
     int ret; // Library result
 
