@@ -23,18 +23,18 @@ static const char CLEAN_BIT = 0x01;
 void timeout(int time) {
     reset_timer();
     // Set dirty bit
-    int res = flash_simple_write(PERSISTENT_TIMEOUT_FLAG_ADDR, &DIRTY_BIT, 1);
-    if (res != 0) {
-        // Handle debug info
-    }
+    // int res = flash_simple_write(PERSISTENT_TIMEOUT_FLAG_ADDR, &DIRTY_BIT, 1);
+    // if (res != 0) {
+    //     // Handle debug info
+    // }
     while (get_timer_ms() < time) {
         // TODO jitter to avoid skipping the jump.
     }
     // Unset dirty bit
-    int res = flash_simple_write(PERSISTENT_TIMEOUT_FLAG_ADDR, &DIRTY_BIT, 1);
-    if (res != 0) {
-        // Handle debug info
-    }
+    // int res = flash_simple_write(PERSISTENT_TIMEOUT_FLAG_ADDR, &DIRTY_BIT, 1);
+    // if (res != 0) {
+    //     // Handle debug info
+    // }
 }
 
 /**

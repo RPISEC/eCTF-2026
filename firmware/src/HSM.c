@@ -29,6 +29,7 @@
 #include "hardware_crypto.h"
 #include "simple_trng.h"
 #include "wallet.h"
+#include "timer.h"
 
 #ifdef AES_TEST
 #include "aes_test.h"
@@ -69,6 +70,10 @@ void init() {
 
     if (!init_hardware_crypto()) {
         print_debug("hardware crypto init error");
+    }
+
+    if  (!init_timer()) {
+        print_debug("timer init error");
     }
 
     init_fs();
