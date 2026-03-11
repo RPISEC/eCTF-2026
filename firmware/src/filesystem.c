@@ -17,7 +17,6 @@
 #include "simple_crypto.h"
 #include "simple_flash.h"
 #include "simple_trng.h"
-#include "host_messaging.h" // DEBUG REMOVE ME
 #include "wallet.h"
 #include "wolfssl/wolfcrypt/ed25519.h"
 
@@ -94,7 +93,6 @@ int encrypt_file(file_t *file, const uint8_t *k_storage) {
         }
         memcpy(&file->headers.iv[i * 4], &rand, 4);
     }
-    print_debug("iv generated");
 
     // Encrypt
     int ret = encrypt_sym(file->contents, file->headers.contents_len, k_storage,
@@ -122,13 +120,11 @@ int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
 
     key = malloc(sizeof(ed25519_key));
     if (key == NULL) {
-        print_error("insufficient memory for ed25519 key");
         return -1;
     }
     ret = wc_ed25519_import_private_key(w_priv, sizeof(key32_t), w_pub,
                                         sizeof(key32_t), key);
     if (ret < 0) {
-        print_error("failed to import w_priv");
         free(key);
         return -2;
     }
@@ -137,14 +133,12 @@ int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
     ret = wc_ed25519_sign_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature),
                               file->signature, &sign_len, key);
     if (sign_len != 64) {
-        print_error("incorrect signature length");
+        return -3;
     }
 
     if (ret < 0) {
-        print_hex_debug(&ret, sizeof(ret));
-        print_error("failed to sign");
         free(key);
-        return -3;
+        return -4;
     }
 
     free(key);
@@ -215,13 +209,11 @@ int verify_file(file_t *file, uint8_t *w_pub) {
 
     key = malloc(sizeof(ed25519_key));
     if (key == NULL) {
-        print_error("insufficient memory for ed25519 key");
         return -1;
     }
 
     ret = wc_ed25519_import_public(w_pub, sizeof(key32_t), key);
     if (ret < 0) {
-        print_error("failed to import w_pub");
         free(key);
         return -2;
     }
@@ -230,9 +222,6 @@ int verify_file(file_t *file, uint8_t *w_pub) {
         file->signature, sizeof(file->signature), (uint8_t *)file,
         sizeof(*file) - sizeof(file->signature), &success, key);
     if (ret < 0 || !success) {
-        print_hex_debug(&ret, sizeof(ret));
-        print_hex_debug(&success, sizeof(success));
-        print_error("file verification failed");
         free(key);
         return -3;
     }

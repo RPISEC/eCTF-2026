@@ -195,8 +195,6 @@ int write(uint16_t pkt_len, uint8_t *buf) {
 
     wallet_lock();
 
-    print_debug("Permission validated");
-
     curr_file = malloc(sizeof(file_t));
     if (curr_file == NULL) {
         print_error("Insufficient memory for file");
@@ -211,8 +209,6 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         command->contents
     );
 
-    print_debug("File created");
-
     if (encrypt_file(curr_file, k_storage) < 0) {
         print_error("Error encrypting file");
         free(curr_file);
@@ -220,7 +216,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     }
 
     if (sign_file(curr_file, w_priv, w_pub) < 0) {
-        print_error("Error storing file");
+        print_error("Error signing file");
         free(curr_file);
         return -2;
     }
@@ -234,8 +230,6 @@ int write(uint16_t pkt_len, uint8_t *buf) {
 
     memset(k_storage, 0, sizeof(key32_t));
     memset(w_priv, 0, sizeof(key32_t));
-
-    print_debug("File written");
 
     // Success message with an empty body
     write_packet(CONTROL_INTERFACE, WRITE_MSG, NULL, 0);
