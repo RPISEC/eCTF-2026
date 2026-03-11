@@ -7,13 +7,12 @@
 
 #include "timeout.h"
 #include "timer.h"
-#include "flags.h"
 #include "simple_flash.h"
 
-#define PERSISTENT_TIMEOUT_FLAG_ADDR __attribute__((section(".persistent_flags")))
+#define PERSISTENT_TIMEOUT_FLAG_ADDR 0xdeadbeef
  
-static const char DIRTY_BIT = 0x01;
-static const char CLEAN_BIT = 0x00;
+static const char DIRTY_BIT = 0x00;
+static const char CLEAN_BIT = 0x01;
 
 /**
  * @brief Times out the user for `time` millseconds, and sets a persistent flag.
@@ -22,17 +21,27 @@ static const char CLEAN_BIT = 0x00;
  * @param time Time to timeout, in millseconds
  */
 void timeout(int time) {
-    timer_reset();
-    flag_set(FLAG_LOCKOUT, DIRTY_BIT);
-    while (timer_get_ms() < time) {
+    reset_timer();
+    // Set dirty bit
+    // int res = flash_simple_write(PERSISTENT_TIMEOUT_FLAG_ADDR, &DIRTY_BIT, 1);
+    // if (res != 0) {
+    //     // Handle debug info
+    // }
+    while (get_timer_ms() < time) {
         // TODO jitter to avoid skipping the jump.
     }
-    flag_set(FLAG_LOCKOUT, CLEAN_BIT);
+    // Unset dirty bit
+    // int res = flash_simple_write(PERSISTENT_TIMEOUT_FLAG_ADDR, &DIRTY_BIT, 1);
+    // if (res != 0) {
+    //     // Handle debug info
+    // }
 }
 
 /**
  * @brief Checks if the persistent timeout bit is set.
  */
 bool is_timed_out() {
-    return flag_get(FLAG_LOCKOUT) == CLEAN_BIT;
+    char timeout_flag = 0;
+    flash_simple_read(PERSISTENT_TIMEOUT_FLAG_ADDR, &timeout_flag, 1);
+    return timeout_flag != CLEAN_BIT;
 }

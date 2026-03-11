@@ -9,8 +9,8 @@ typedef enum {
     FLAG_LOCKOUT
 } flag_t;
 
-int flag_set(flag_t flag, uint64_t value);
+int flag_set(flag_t flag, uint32_t value);
 
-uint64_t flag_get(flag_t flag);
+uint32_t flag_get(flag_t flag);
 
 #endif // __FLAGS_H__

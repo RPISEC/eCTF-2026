@@ -1,5 +1,5 @@
 // timer.h
 
-void timer_reset();
-float timer_get_ms();
-bool timer_init();
+void reset_timer();
+float get_timer_ms();
+bool init_timer();
