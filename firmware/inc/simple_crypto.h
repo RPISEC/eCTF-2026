@@ -21,7 +21,7 @@
 
 /******************************** MACRO DEFINITIONS ********************************/
 #define BLOCK_SIZE AES_BLOCK_SIZE
-#define KEY_SIZE 16
+// #define KEY_SIZE 16
 #define HASH_SIZE MD5_DIGEST_SIZE
 
 /******************************** FUNCTION PROTOTYPES ********************************/
@@ -38,7 +38,9 @@
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *ciphertext);
+int encrypt_sym(const uint8_t *plaintext, size_t len, const uint8_t *key,
+                const uint8_t *iv, uint8_t *auth_tag, const uint8_t *aad,
+                size_t aad_len, uint8_t *ciphertext);
 
 /** @brief Decrypts ciphertext using a symmetric cipher
  *
@@ -53,7 +55,9 @@ int encrypt_sym(uint8_t *plaintext, size_t len, uint8_t *key, uint8_t *ciphertex
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *plaintext);
+int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *iv,
+                uint8_t *auth_tag, uint8_t *aad, size_t aad_len,
+                uint8_t *plaintext);
 
 /** @brief Hashes arbitrary-length data
  *

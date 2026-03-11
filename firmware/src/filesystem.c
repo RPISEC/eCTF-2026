@@ -14,7 +14,11 @@
 #include <stdint.h>
 
 #include "filesystem.h"
+#include "simple_crypto.h"
 #include "simple_flash.h"
+#include "simple_trng.h"
+#include "wallet.h"
+#include "wolfssl/wolfcrypt/ed25519.h"
 
 int load_fat() {
     flash_simple_read((uint32_t)_FLASH_FAT_START, FILE_ALLOCATION_TABLE, sizeof(FILE_ALLOCATION_TABLE));
@@ -42,8 +46,9 @@ int init_fs() {
  * @return True if the slot is in use. False otherwise.
 */
 bool is_slot_in_use(slot_t slot) {
-    file_t temp_file;
-    return (!read_file(slot, &temp_file) && temp_file.in_use == FILE_IN_USE);
+    file_headers_t temp_file_headers;
+    get_file_headers(slot, &temp_file_headers);
+    return temp_file_headers.in_use == FILE_IN_USE;
 }
 
 /** @brief Create a new file object in memory
@@ -61,18 +66,86 @@ int create_file(
 ) {
     memset(dest, 0, sizeof(file_t));
 
-    dest->in_use = FILE_IN_USE;
-    dest->group_id = group_id;
-    dest->contents_len = contents_len;
+    dest->headers.in_use = FILE_IN_USE;
+    dest->headers.group_id = group_id;
+    dest->headers.contents_len = contents_len;
 
     // name must be null terminated, and the contents are defined by a length
-    strcpy(dest->name, name);
+    strcpy(dest->headers.name, name);
     memcpy(dest->contents, contents, contents_len);
 
     return 0;
 }
 
-/** @brief Create a new file object in memory
+/** @brief Encrypt a file in memory
+ *
+ *  @param file The file to encrypt
+ *  @param k_storage The AES 256-bit key to use for encryption
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int encrypt_file(file_t *file, const uint8_t *k_storage) {
+    // Generate random IV
+    for (int i = 0; i < AES_IV_SIZE / 4; i++) {
+        uint32_t rand = trng_get_u32();
+        if (rand == 0) {
+            return -1;
+        }
+        memcpy(&file->headers.iv[i * 4], &rand, 4);
+    }
+
+    // Encrypt
+    int ret = encrypt_sym(file->contents, file->headers.contents_len, k_storage,
+                          file->headers.iv, file->headers.auth_tag, NULL, 0,
+                          file->contents); // Encrypt in place
+    if (ret < 0) {
+        return -2;
+    }
+
+    return 0;
+}
+
+/** @brief Sign a file in memory
+ *
+ *  @param file The file to sign
+ *  @param w_priv The ED25519 256-bit private key
+ *  @param w_pub The ED25519 256-bit public key
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
+    ed25519_key *key;
+    uint32_t sign_len;
+    int ret;
+
+    key = malloc(sizeof(ed25519_key));
+    if (key == NULL) {
+        return -1;
+    }
+    ret = wc_ed25519_import_private_key(w_priv, sizeof(key32_t), w_pub,
+                                        sizeof(key32_t), key);
+    if (ret < 0) {
+        free(key);
+        return -2;
+    }
+
+    sign_len = sizeof(file->signature);
+    ret = wc_ed25519_sign_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature),
+                              file->signature, &sign_len, key);
+    if (sign_len != 64) {
+        return -3;
+    }
+
+    if (ret < 0) {
+        free(key);
+        return -4;
+    }
+
+    free(key);
+    return 0;
+}
+
+/** @brief Create a new file object on flash
  *
  *  @param slot The slot to write the file to
  *  @param src The sourc file to store
@@ -80,11 +153,13 @@ int create_file(
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int write_file(slot_t slot, file_t *src, uint8_t *uuid) {
+int write_file(slot_t slot, file_t *src, const uint8_t *uuid) {
     unsigned int length, flash_addr;
+    int ret;
 
     flash_addr = FILE_START_PAGE_FROM_SLOT(slot);
-    length = FILE_TOTAL_SIZE(src->contents_len);
+    length = FILE_TOTAL_SIZE(src->headers.contents_len);
+
     // Update the FAT for the new file
     memcpy(&FILE_ALLOCATION_TABLE[slot].uuid, uuid, UUID_SIZE);
     FILE_ALLOCATION_TABLE[slot].flash_addr = flash_addr;
@@ -97,7 +172,7 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid) {
     }
 
     // now write the file
-    return flash_simple_write(FILE_ALLOCATION_TABLE[slot].flash_addr, src, length);
+    return flash_simple_write(FILE_ALLOCATION_TABLE[slot].flash_addr, src, sizeof(file_t));
 }
 
 /** @brief Read a file from persistent storage into memory
@@ -115,10 +190,60 @@ int read_file(slot_t slot, file_t *dest) {
     if (flash_addr < 0 || file_size < 0) {
         return -1;
     }
-    flash_simple_read(flash_addr, dest, file_size);
+
+    flash_simple_read(flash_addr, dest, sizeof(file_t));
 
     return 0;
 }
+
+/** @brief Verify a file's signature in memory
+ *
+ *  @param file The file to verify.
+ *  @param w_pub The ED25519 256-bit public key.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int verify_file(file_t *file, uint8_t *w_pub) {
+    ed25519_key *key;
+    int ret, success;
+
+    key = malloc(sizeof(ed25519_key));
+    if (key == NULL) {
+        return -1;
+    }
+
+    ret = wc_ed25519_import_public(w_pub, sizeof(key32_t), key);
+    if (ret < 0) {
+        free(key);
+        return -2;
+    }
+
+    ret = wc_ed25519_verify_msg(
+        file->signature, sizeof(file->signature), (uint8_t *)file,
+        sizeof(*file) - sizeof(file->signature), &success, key);
+    if (ret < 0 || !success) {
+        free(key);
+        return -3;
+    }
+
+    free(key);
+    return 0;
+}
+
+/** @brief Decrypt a file's contents in memory
+ *
+ *  @param file The file to decrypt.
+ *  @param dest The AES 256-bit key to decrypt with.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int decrypt_file(file_t *file, uint8_t *k_storage) {
+    int ret = decrypt_sym(file->contents, file->headers.contents_len, k_storage,
+                          file->headers.iv, file->headers.auth_tag, NULL, 0,
+                          file->contents); // Decrypt in place
+    return ret;
+}
+
 
 /** @brief Get a read-only pointer to a file's metadata
  *
@@ -128,4 +253,20 @@ int read_file(slot_t slot, file_t *dest) {
 */
 const filesystem_entry_t *get_file_metadata(slot_t slot) {
     return &FILE_ALLOCATION_TABLE[slot];
+}
+
+/** @brief Get a read-only pointer to a file's headers. This returns a file_t,
+ *         but the contents are garbage data and should not be accessed.
+ *  @param slot The slot to get headers for
+*/
+const int get_file_headers(slot_t slot, file_headers_t *file_headers) {
+    int flash_addr, file_size;
+
+    flash_addr = FILE_ALLOCATION_TABLE[slot].flash_addr;
+    file_size = FILE_ALLOCATION_TABLE[slot].length;
+    if (flash_addr < 0 || file_size < 0) {
+        return -1;
+    }
+    flash_simple_read(flash_addr, file_headers, sizeof(file_headers_t));
+    return 0;
 }

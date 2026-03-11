@@ -32,8 +32,8 @@
 
 *****************************************************************************/
 -uinterruptVectors
---stack_size=256
---heap_size=4096
+--stack_size=4096
+--heap_size=16384
 
 #define FLASH_BASE 0x6000
 
@@ -70,6 +70,12 @@ SECTIONS
     .data   :   > SRAM
     .bss    :   > SRAM
     .sysmem :   > SRAM
+    .stack_guard (NOLOAD) :
+    {
+        __stack_guard_start = .;
+        . += 64;
+        __stack_guard_end = .;
+    } > SRAM (HIGH)
     .stack  :   > SRAM (HIGH)
 
     .BCRConfig  : {} > BCR_CONFIG

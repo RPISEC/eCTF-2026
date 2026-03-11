@@ -19,10 +19,10 @@
 
 #include <wolfssl/wolfcrypt/wc_port.h>
 
-#include "simple_flash.h"
 #include "host_messaging.h"
 #include "commands.h"
 #include "filesystem.h"
+#include "ti/driverlib/m0p/dl_interrupt.h"
 #include "ti_msp_dl_config.h"
 #include "status_led.h"
 #include "simple_uart.h"
@@ -30,6 +30,7 @@
 #include "simple_trng.h"
 #include "wallet.h"
 #include "timer.h"
+#include "memory_tools.h"
 
 #ifdef AES_TEST
 #include "aes_test.h"
@@ -57,12 +58,15 @@ static unsigned char uart_buf[MAX_MSG_SIZE];
 /** @brief Initializes peripherals for system boot.
 */
 void init() {
+    init_stack_guard();
+
     // Initialize all of the hardware components
     SYSCFG_DL_init();
 
     // need to initialize wolfcrypt before initializing wolfcrypt-dependent components
-    wolfCrypt_Init();
-    print_debug("wolfCrypt initialized\n");
+    if (wolfCrypt_Init() < 0) {
+        print_debug("wolfcrypt init error");
+    };
 
     if(!trng_init()) {
         print_debug("trng init error");
@@ -95,6 +99,10 @@ int main(void) {
     // process commands forever
     while (1) {
         print_debug("Ready\n");
+        if (stack_overflow_detected()) {
+            print_error("!!! STACK OVERFLOW DETECTED !!!");
+            Default_Handler();
+        }
 
         STATUS_LED_ON();
 

@@ -118,20 +118,20 @@ static int extract_aesgcm_params(const wc_CryptoInfo* info, HC_AesGcmParams* p)
 }
 
 
-int init_hardware_crypto(void) {
+bool init_hardware_crypto(void) {
     // Register the hardware crypto callback with wolfcrypt
     int ret = wc_CryptoCb_RegisterDevice(
         HARDWARE_CRYPTO_DEVICE_ID, callbackHardwareCrypto, NULL
     );
     if (ret != 0) {
-        return -1;
+        return false;
     }
 
     // Enables a AES_ADV interrupt in the NVIC interrupt controller
     NVIC_EnableIRQ(AESADV_INT_IRQn);
     DL_SYSCTL_disableSleepOnExit();
 
-    return 0;
+    return true;
 }
 
 

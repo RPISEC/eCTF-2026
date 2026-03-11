@@ -21,10 +21,22 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 
 // crypto algorithms
 #define HAVE_AESGCM
+#define HAVE_ED25519
+#define WOLFSSL_SHA512
+// #define ED25519_SMALL
 
 // timing resistance settings
 #define TFM_TIMING_RESISTANT
 #define WC_RSA_BLINDING
 #define ECC_TIMING_RESISTANT
+
+// From https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html#building-with-gcc-arm
+#define NO_WOLFSSL_DIR
+#define SINGLE_THREADED
+#define HAVE_PK_CALLBACKS
+#define WOLFSSL_USER_IO
+#define NO_WRITEV
+#define TIME_T_NOT_64BIT
+#define NO_FILESYSTEM
 
 #endif // __USER_SETTINGS_H__

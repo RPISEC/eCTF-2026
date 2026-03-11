@@ -1,15 +1,9 @@
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
-#include "host_messaging.h"
 #include "secrets.h"
 #include "wallet.h"
-#include "wolfssl/wolfcrypt/hash.h"
-#include "wolfssl/wolfcrypt/hmac.h"
-
-#define PERM_R 0x01
-#define PERM_W 0x02
-#define PERM_C 0x04
+#include "simple_crypto.h"
 
 typedef uint8_t key32_t[32];
 
@@ -60,7 +54,6 @@ static int8_t get_group_index(uint16_t group_id) {
  * Returns 0 on success. */
 WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
     static key32_t pin_key; // Safer in global memory
-    Aes ctx;
     int ret;
 
     ret = wc_PBKDF2(pin_key, pin, 6, wallet->pin_salt, PIN_SALT_LEN,
@@ -69,19 +62,11 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
         return -1;
     }
 
-    ret = wc_AesGcmSetKey(&ctx, pin_key, sizeof(key32_t));
+    ret = decrypt_sym(wallet->wallet_ct, KS_CT_LEN, pin_key, wallet->wallet_iv,
+                      wallet->wallet_tag, (uint8_t *)&(wallet->clear),
+                      CLEAR_STORAGE_LEN, (uint8_t *)&keystore);
     if (ret != 0) {
         return -2;
-    }
-
-    ret = wc_AesGcmDecrypt(&ctx, (uint8_t *)&keystore,   //
-                           wallet->wallet_ct, KS_CT_LEN, //
-                           wallet->wallet_iv, KS_IV_LEN, //
-                           wallet->wallet_tag, KS_TAG_LEN,
-                           (uint8_t *)&(wallet->clear), CLEAR_STORAGE_LEN);
-    if (ret != 0) {
-        /* Decryption error (incorrect key) */
-        return -3;
     }
 
     is_locked = false;
