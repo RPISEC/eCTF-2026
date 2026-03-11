@@ -164,8 +164,25 @@ int write_file(slot_t slot, file_t *src, const uint8_t *uuid);
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int read_file(slot_t slot, file_t *dest, uint8_t* key);
+int read_file(slot_t slot, file_t *dest);
 
+/** @brief Verify a file's signature in memory
+ *
+ *  @param file The file to verify.
+ *  @param w_pub The ED25519 256-bit public key.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int verify_file(file_t *file, uint8_t *w_pub);
+
+/** @brief Decrypt a file's contents in memory
+ *
+ *  @param file The file to decrypt.
+ *  @param dest The AES 256-bit key to decrypt with.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int decrypt_file(file_t *file, uint8_t *k_storage);
 
 /** @brief Get a read-only pointer to a file's metadata
  *

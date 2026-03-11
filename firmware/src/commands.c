@@ -93,18 +93,18 @@ int list(uint16_t pkt_len, uint8_t *buf) {
 int read(uint16_t pkt_len, uint8_t *buf) {
     read_command_t *command = (read_command_t*)buf;
     file_t *curr_file;
-    key32_t key;
+    key32_t k_storage, w_pub;
+    int ret;
 
     if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
     }
 
-
     curr_file = malloc(sizeof(file_t));
     if (curr_file == NULL) {
         print_error("Insufficient memory for file");
-        return -1;
+        return -2;
     }
 
     get_file_headers(command->slot, &curr_file->headers);
@@ -112,25 +112,41 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     if (!wallet_has_perms(curr_file->headers.group_id, PERM_R)) {
         print_error("Invalid permission");
         free(curr_file);
-        return -1;
+        return -3;
     }
 
-    int ret = get_k_storage(&key, curr_file->headers.group_id);
+    ret = get_w_pub(&w_pub, curr_file->headers.group_id);
+    ret = get_k_storage(&k_storage, curr_file->headers.group_id);
     if (ret < 0) {
         print_error("Invalid key");
         free(curr_file);
-        return -1;
+        return -4;
     }
 
     wallet_lock();
-    ret = read_file(command->slot, curr_file, key);
+
+    ret = read_file(command->slot, curr_file);
     if (ret < 0) {
-        print_hex_debug(&ret, sizeof(ret));
         print_error("Failed to read file");
         free(curr_file);
-        return -1;
+        return -5;
     }
-    memset(key, 0, AES_KEY_SIZE);
+
+    ret = verify_file(curr_file, w_pub);
+    if (ret < 0) {
+        print_error("Failed to verify file");
+        free(curr_file);
+        return -6;
+    }
+
+    ret = decrypt_file(curr_file, k_storage);
+    if (ret < 0) {
+        print_error("Failed to decrypt file");
+        free(curr_file);
+        return -7;
+    }
+
+    memset(k_storage, 0, AES_KEY_SIZE);
 
 
     /* To save memory, we re-use the space for curr_file to store the packet.
@@ -362,7 +378,7 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
             // if this read fails, the other device will not receive a response and
             // may need to be reset before further testing can occur
 
-            if (read_file(command->slot, &recv_resp.file, NULL) < 0) {
+            if (read_file(command->slot, &recv_resp.file) < 0) {
                 print_error("Failed to read file");
                 return -1;
             }

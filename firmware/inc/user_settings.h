@@ -23,7 +23,7 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 #define HAVE_AESGCM
 #define HAVE_ED25519
 #define WOLFSSL_SHA512
-#define ED25519_SMALL
+// #define ED25519_SMALL
 
 // timing resistance settings
 #define TFM_TIMING_RESISTANT

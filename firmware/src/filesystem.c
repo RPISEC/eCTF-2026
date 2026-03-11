@@ -125,7 +125,8 @@ int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
         print_error("insufficient memory for ed25519 key");
         return -1;
     }
-    ret = wc_ed25519_import_private_key(w_priv, sizeof(key32_t), w_pub, sizeof(key32_t), key);
+    ret = wc_ed25519_import_private_key(w_priv, sizeof(key32_t), w_pub,
+                                        sizeof(key32_t), key);
     if (ret < 0) {
         print_error("failed to import w_priv");
         free(key);
@@ -133,7 +134,7 @@ int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
     }
 
     sign_len = sizeof(file->signature);
-    ret = wc_ed25519_sign_msg((uint8_t *)file, sizeof(file_t) - 64,
+    ret = wc_ed25519_sign_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature),
                               file->signature, &sign_len, key);
     if (sign_len != 64) {
         print_error("incorrect signature length");
@@ -184,11 +185,10 @@ int write_file(slot_t slot, file_t *src, const uint8_t *uuid) {
  *
  *  @param slot The slot to read
  *  @param dest The destination address to store the file
- *  @param key The AES key to decrypt with. If NULL, skip this step.
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int read_file(slot_t slot, file_t *dest, uint8_t* key) {
+int read_file(slot_t slot, file_t *dest) {
     int flash_addr, file_size;
 
     flash_addr = FILE_ALLOCATION_TABLE[slot].flash_addr;
@@ -196,20 +196,65 @@ int read_file(slot_t slot, file_t *dest, uint8_t* key) {
     if (flash_addr < 0 || file_size < 0) {
         return -1;
     }
-    flash_simple_read(flash_addr, dest, file_size);
 
-    // If no key is provided, return it still encrypted. This is useful for receive.
-    if (key == NULL) {
-        return 0;
-    }
-    // Otherwise, decrypt it like normal.
-    int ret = decrypt_sym(dest->contents, dest->headers.contents_len, key,
-                          dest->headers.iv, dest->headers.auth_tag, NULL, 0,
-                          dest->contents); // Decrypt in place
-    if (ret != 0)
-        return ret;
+    flash_simple_read(flash_addr, dest, sizeof(file_t));
+
     return 0;
 }
+
+/** @brief Verify a file's signature in memory
+ *
+ *  @param file The file to verify.
+ *  @param w_pub The ED25519 256-bit public key.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int verify_file(file_t *file, uint8_t *w_pub) {
+    ed25519_key *key;
+    int ret, success;
+
+    key = malloc(sizeof(ed25519_key));
+    if (key == NULL) {
+        print_error("insufficient memory for ed25519 key");
+        return -1;
+    }
+
+    ret = wc_ed25519_import_public(w_pub, sizeof(key32_t), key);
+    if (ret < 0) {
+        print_error("failed to import w_pub");
+        free(key);
+        return -2;
+    }
+
+    ret = wc_ed25519_verify_msg(
+        file->signature, sizeof(file->signature), (uint8_t *)file,
+        sizeof(*file) - sizeof(file->signature), &success, key);
+    if (ret < 0 || !success) {
+        print_hex_debug(&ret, sizeof(ret));
+        print_hex_debug(&success, sizeof(success));
+        print_error("file verification failed");
+        free(key);
+        return -3;
+    }
+
+    free(key);
+    return 0;
+}
+
+/** @brief Decrypt a file's contents in memory
+ *
+ *  @param file The file to decrypt.
+ *  @param dest The AES 256-bit key to decrypt with.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int decrypt_file(file_t *file, uint8_t *k_storage) {
+    int ret = decrypt_sym(file->contents, file->headers.contents_len, k_storage,
+                          file->headers.iv, file->headers.auth_tag, NULL, 0,
+                          file->contents); // Decrypt in place
+    return ret;
+}
+
 
 /** @brief Get a read-only pointer to a file's metadata
  *
