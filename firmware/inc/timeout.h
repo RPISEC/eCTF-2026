@@ -11,9 +11,9 @@
 
 #include <stdbool.h>
 
-#define PIN_TIMEOUT 4000
+#define TIMEOUT_PIN 4000
+#define TIMEOUT_BOOT 600
 
 void timeout(int time);
-bool is_timed_out();
 
 #endif //__TIMEOUT_H__
