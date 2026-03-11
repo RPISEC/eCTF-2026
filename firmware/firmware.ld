@@ -44,7 +44,8 @@ MEMORY
     FLASH           (RX)  : origin = 0x00006000, length = 0x00020000 /* Location of team firmware */
     FILES           (RW)  : origin = 0x00026000, length = 0x00014000 /* Location of HSM files */ 
     FAT             (RW)  : origin = 0x0003A000, length = 0x00000400 /* Used to store tag, length, pointer values for files */
-    APP2            (R)  : origin = 0x0003A400, length = 0x00005c00 /* Location of team firmware */
+    APP2            (R)   : origin = 0x0003A400, length = 0x00005800 /* Location of team firmware */
+    FLAGS           (RW)  : origin = 0x0003FC00, length = 0x00000400 /* Used to store persistent flags like Lockout status */
     SRAM            (RWX) : origin = 0x20200000, length = 0x00008000
     BCR_CONFIG      (R)   : origin = 0x41C00000, length = 0x000000FF
     BSL_CONFIG      (R)   : origin = 0x41C00100, length = 0x00000080
@@ -64,6 +65,9 @@ SECTIONS
     .TI.ramfunc   : load = FLASH, palign(8), run=SRAM, table(BINIT)
     .files        : palign(8) {} > FILES
     .wallet       : palign(8) {} > APP2
+    .persistent_flags : palign(8) {
+        __FLASH_FLAGS_START = .;
+    } > FLAGS
 
     .vtable :   > SRAM
     .args   :   > SRAM
