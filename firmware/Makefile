@@ -27,6 +27,8 @@ OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_crypto.so \
     $(BUILDDIR)/hardware_crypto.so \
     $(BUILDDIR)/wallet.so \
+    $(BUILDDIR)/timeout.so \
+    $(BUILDDIR)/timer.so \
     $(BUILDDIR)/memory_tools.so
 
 ifeq ($(AES_TEST), 1)

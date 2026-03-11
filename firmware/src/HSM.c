@@ -28,6 +28,8 @@
 #include "simple_uart.h"
 #include "hardware_crypto.h"
 #include "simple_trng.h"
+#include "wallet.h"
+#include "timeout.h"
 #include "memory_tools.h"
 
 #ifdef AES_TEST
@@ -74,7 +76,13 @@ void init() {
         print_debug("hardware crypto init error");
     }
 
+    if  (!init_timer()) {
+        print_debug("timer init error");
+    }
+
     init_fs();
+
+    timeout(TIMEOUT_BOOT);
 }
 
 /**********************************************************
