@@ -12,7 +12,7 @@
 
 volatile uint32_t timer_overflows = 0;
 
-void reset_timer() {
+void timer_reset() {
     DL_Timer_stopCounter(TIMER_0_INST);
     
     DL_Timer_setTimerCount(TIMER_0_INST, TIMER_0_INST_LOAD_VALUE);
@@ -21,12 +21,12 @@ void reset_timer() {
     DL_Timer_startCounter(TIMER_0_INST);
 }
 
-bool init_timer() {
+bool timer_init() {
     NVIC_EnableIRQ(TIMER_0_INST_INT_IRQN);
     return true;
 }
 
-float get_timer_ms() {
+float timer_get_ms() {
     uint32_t overflows;
     uint32_t current_count;
     do {

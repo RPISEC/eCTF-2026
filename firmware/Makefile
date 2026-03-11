@@ -28,7 +28,8 @@ OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/hardware_crypto.so \
     $(BUILDDIR)/wallet.so \
     $(BUILDDIR)/timeout.so \
-    $(BUILDDIR)/timer.so
+    $(BUILDDIR)/timer.so \
+    $(BUILDDIR)/flags.so
 
 ifeq ($(AES_TEST), 1)
 OBJECTS +=$(BUILDDIR)/aes_test.so

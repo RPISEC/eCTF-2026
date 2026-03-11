@@ -72,7 +72,7 @@ void init() {
         print_debug("hardware crypto init error");
     }
 
-    if  (!init_timer()) {
+    if  (!timer_init()) {
         print_debug("timer init error");
     }
 
