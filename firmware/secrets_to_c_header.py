@@ -48,7 +48,7 @@ def _parse_permissions(perm_string):
         if entry.count("=") != 1:
             raise ValueError(f"Invalid permission entry '{entry}'.")
         group_str, perms = entry.split("=")
-        if not re.fullmatch(r"[0-9a-fA-F]{4}", group_str):
+        if not re.fullmatch(r"[0-9a-fA-F]{1,4}", group_str):
             raise ValueError(f"Invalid group id '{group_str}'.")
         if len(perms) != 3:
             raise ValueError(f"Invalid permissions '{perms}'.")
