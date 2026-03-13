@@ -45,7 +45,7 @@ int encrypt_sym(const uint8_t *plaintext, size_t len, const uint8_t *key,
     int ret; // Library result
 
     // Ensure valid length
-    if (len <= 0 || len % BLOCK_SIZE)
+    if (len <= 0)
         return -1;
 
     aes = wc_AesNew(NULL, HARDWARE_CRYPTO_DEVICE_ID, &ret);
@@ -93,7 +93,7 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *iv,
     int ret; // Library result
 
     // Ensure valid length
-    if (len <= 0 || len % BLOCK_SIZE)
+    if (len <= 0)
         return -1;
 
     aes = wc_AesNew(NULL, HARDWARE_CRYPTO_DEVICE_ID, &ret);
