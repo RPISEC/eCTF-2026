@@ -22,13 +22,14 @@
 #include "host_messaging.h"
 #include "commands.h"
 #include "filesystem.h"
-#include "ti/driverlib/m0p/dl_interrupt.h"
+#include <ti/driverlib/m0p/dl_interrupt.h>
 #include "ti_msp_dl_config.h"
 #include "status_led.h"
 #include "simple_uart.h"
 #include "hardware_crypto.h"
 #include "simple_trng.h"
 #include "wallet.h"
+#include "timer.h"
 #include "timeout.h"
 #include "memory_tools.h"
 

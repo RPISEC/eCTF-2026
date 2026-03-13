@@ -44,8 +44,8 @@ endif
 # specify wolfcrypt settings in user_settings.h
 CFLAGS += -DWOLFSSL_USER_SETTINGS
 
-WOLFSSL_INC = wolfssl/wolfcrypt/src
-CFLAGS += -I./wolfssl
+WOLFSSL_INC = /opt/wolfssl/wolfcrypt/src
+CFLAGS += -I/opt/wolfssl
 
 # needed for wolfcrypt
 OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/cryptocb.o

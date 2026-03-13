@@ -1,6 +1,6 @@
 ## Build Instructions
-1. Clone the [WolfSSL](https://github.com/wolfSSL/wolfssl) crypto library to firmware/
-2. To build, follow the [Boot Reference](https://rules.ectf.mitre.org/2026/getting_started/boot_reference.html) for your operating system.
+1. To build, follow the [Boot Reference](https://rules.ectf.mitre.org/2026/getting_started/boot_reference.html) for your operating system.
+2. Optionally, install the MSPM0 SDK, TI-Clang, and Wolfcrypt to the `/opt` directory in your development environment, following the commands from the `Dockerfile`.
 
 
 ## Layout

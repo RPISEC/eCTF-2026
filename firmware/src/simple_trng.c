@@ -1,7 +1,7 @@
 #include "simple_trng.h"
 #include "host_messaging.h"
-#include "ti/driverlib/dl_trng.h"
-#include "wolfssl/wolfcrypt/error-crypt.h"
+#include <ti/driverlib/dl_trng.h>
+#include <wolfssl/wolfcrypt/error-crypt.h>
 
 #define TRNG_CMD_TIMEOUT 100000UL
 

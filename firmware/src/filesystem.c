@@ -18,7 +18,7 @@
 #include "simple_flash.h"
 #include "simple_trng.h"
 #include "wallet.h"
-#include "wolfssl/wolfcrypt/ed25519.h"
+#include <wolfssl/wolfcrypt/ed25519.h>
 
 int load_fat() {
     flash_simple_read((uint32_t)_FLASH_FAT_START, FILE_ALLOCATION_TABLE, sizeof(FILE_ALLOCATION_TABLE));
