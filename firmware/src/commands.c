@@ -16,6 +16,7 @@
 #include "host_messaging.h"
 #include "simple_crypto.h"
 #include "simple_trng.h"
+#include "timer.h"
 #include "wallet.h"
 
 #include <wolfssl/wolfcrypt/curve25519.h>
@@ -257,6 +258,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     uint16_t len_recv_msg;
     int ret;
 
+    reset_timer();
     if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
@@ -268,10 +270,13 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     request.slot = command->read_slot;
 
     print_debug("Sending request");
+    print_time();
+
     // request the file from the neighboring device
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&request, sizeof(receive_request_t));
 
     print_debug("Sent request");
+    print_time();
 
     curve25519_key a_priv, b_pub;
     wc_curve25519_init(&a_priv);
@@ -285,6 +290,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Generated keypair");
+    print_time();
 
     receive_challenge_t chal_ctx;
     len_recv_msg = sizeof(chal_ctx);
@@ -299,6 +305,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Received challenge");
+    print_time();
 
     uint32_t keysize = 32;
     wc_curve25519_export_public(&a_priv, chal_ctx.a_pub, &keysize);
@@ -314,6 +321,8 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     sign_msg((uint8_t *)&chal_ctx, sizeof(chal_ctx) - 64, chal_ctx.signature, c_priv, c_pub);
 
     print_debug("Signed challenge");
+    print_time();
+
     print_hex_debug(&chal_ctx, sizeof(chal_ctx));
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &chal_ctx, sizeof(chal_ctx));
 
@@ -329,6 +338,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     print_debug("Generated shared key");
     print_hex_debug(&shared_key, shared_size);
+    print_time();
 
     // receive the response message
     //
@@ -349,6 +359,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Received file packet");
+    print_time();
 
     ret = decrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t),
                 shared_key, recv_resp->iv, recv_resp->auth_tag, NULL, 0,
@@ -360,6 +371,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Decrypted packet");
+    print_time();
 
     key32_t w_pub;
     ret = get_w_pub(&w_pub, chal_ctx.group_id);
@@ -371,6 +383,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Verified file");
+    print_time();
 
     // write that file into the file system
     if (write_file(command->write_slot, &recv_resp->file, recv_resp->uuid) < 0) {
@@ -380,6 +393,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Wrote file");
+    print_time();
 
     // empty success message
     write_packet(CONTROL_INTERFACE, RECEIVE_MSG, NULL, 0);
@@ -435,7 +449,10 @@ static int handle_receive(receive_request_t *recv_req) {
     int ret;
     uint16_t len_recv_msg;
 
+    reset_timer();
+
     print_debug("Received request");
+    print_time();
 
     memset(&chal_ctx, 0, sizeof(chal_ctx));
 
@@ -452,6 +469,7 @@ static int handle_receive(receive_request_t *recv_req) {
     chal_ctx.slot = recv_req->slot;
 
     print_debug("set slot");
+    print_time();
 
     // Get group id
     file_headers_t temp_file_headers;
@@ -466,6 +484,8 @@ static int handle_receive(receive_request_t *recv_req) {
     chal_ctx.group_id = temp_file_headers.group_id;
 
     print_debug("set group id");
+    print_time();
+
     // Generate nonce
     uint32_t nonce = trng_get_u32();
     if (nonce == 0) {
@@ -478,6 +498,8 @@ static int handle_receive(receive_request_t *recv_req) {
     chal_ctx.nonce = nonce;
 
     print_debug("set nonce");
+    print_time();
+
     // Generate key pair
     curve25519_key b_priv, a_pub;
     wc_curve25519_init(&b_priv);
@@ -496,6 +518,8 @@ static int handle_receive(receive_request_t *recv_req) {
     wc_curve25519_export_public(&b_priv, chal_ctx.b_pub, &keysize);
 
     print_debug("set key");
+    print_time();
+
     // Respond to initial request
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
 
@@ -505,12 +529,16 @@ static int handle_receive(receive_request_t *recv_req) {
         print_error("Opcode mismatch");
         return -5;
     }
-    if (chal_ctx.slot != recv_req->slot || chal_ctx.group_id != temp_file_headers.group_id || chal_ctx.nonce != nonce) {
+    if (chal_ctx.slot != recv_req->slot ||
+        chal_ctx.group_id != temp_file_headers.group_id ||
+        chal_ctx.nonce != nonce) {
         print_error("Mismatch in received data.");
         return -6;
     }
 
     print_debug("received challenge response");
+    print_time();
+
     // Verify challenge signature
     key32_t c_pub;
     ret = get_c_pub(&c_pub, chal_ctx.group_id);
@@ -524,6 +552,8 @@ static int handle_receive(receive_request_t *recv_req) {
     }
 
     print_debug("verified signature");
+    print_time();
+
     // Derive shared secret
     ret = wc_curve25519_import_public(chal_ctx.a_pub, 32, &a_pub);
     if (ret < 0) {
@@ -542,6 +572,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
     print_debug("derived shared key");
     print_hex_debug(&shared_key, shared_size);
+    print_time();
 
     // Read file into response, encrypt response
     receive_response_t *recv_resp = malloc(sizeof(receive_response_t));
@@ -576,6 +607,8 @@ static int handle_receive(receive_request_t *recv_req) {
     }
 
     print_debug("Read file");
+    print_time();
+
     ret = encrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t), shared_key,
                       recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                       recv_resp->uuid);
@@ -586,10 +619,13 @@ static int handle_receive(receive_request_t *recv_req) {
     }
 
     print_debug("Encrypted file packet");
+    print_time();
+
     // Send response
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, recv_resp, sizeof(*recv_resp));
 
     print_debug("Sent file packet");
+    print_time();
 
     free(recv_resp);
     return 0;
