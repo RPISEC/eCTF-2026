@@ -11,15 +11,11 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-
 #include "simple_crypto.h"
+#include "hardware_crypto.h"
+#include "ti_msp_dl_config.h"
 #include <stdint.h>
 #include <string.h>
-#include "hardware_crypto.h"
-#include "host_messaging.h"
-#include "ti_msp_dl_config.h"
-
-
 
 /******************************** FUNCTION PROTOTYPES ********************************/
 /** @brief Encrypts plaintext using a symmetric cipher
@@ -149,28 +145,29 @@ int sign_msg(const uint8_t *in, int in_size, uint8_t *sig, const uint8_t *priv,
     uint32_t sign_len;
     int ret;
 
-    key = malloc(sizeof(ed25519_key));
-    if (key == NULL) {
+    key = wc_ed25519_new(NULL, INVALID_DEVID, &ret);
+    if (key == NULL || ret != 0) {
         return -1;
     }
     ret = wc_ed25519_import_private_key(priv, 32, pub, 32, key);
     if (ret < 0) {
-        free(key);
+        wc_ed25519_delete(key, &key);
         return -2;
     }
 
     sign_len = 64;
     ret = wc_ed25519_sign_msg(in, in_size, sig, &sign_len, key);
     if (sign_len != 64) {
+        wc_ed25519_delete(key, &key);
         return -3;
     }
 
     if (ret < 0) {
-        free(key);
+        wc_ed25519_delete(key, &key);
         return -4;
     }
 
-    free(key);
+    wc_ed25519_delete(key, &key);
     return 0;
 }
 
@@ -187,17 +184,14 @@ int verify_msg(const uint8_t *data, int data_size, const uint8_t *sig, const uin
     ed25519_key *key;
     int ret, success;
 
-    key = malloc(sizeof(ed25519_key));
-    if (key == NULL) {
+    key = wc_ed25519_new(NULL, INVALID_DEVID, &ret);
+    if (key == NULL || ret != 0) {
         return -1;
     }
 
     ret = wc_ed25519_import_public(pub, 32, key);
     if (ret < 0) {
-        print_hex_debug(&ret, sizeof(ret));
-        print_hex_debug(pub, 32);
-        print_debug("verify_msg: failed to import key");
-        free(key);
+        wc_ed25519_delete(key, &key);
         return -2;
     }
 
@@ -206,11 +200,11 @@ int verify_msg(const uint8_t *data, int data_size, const uint8_t *sig, const uin
         sig, 64, data,
         data_size, &success, key);
     if (ret < 0 || !success) {
-        free(key);
+        wc_ed25519_delete(key, &key);
         return -3;
     }
 
-    free(key);
+    wc_ed25519_delete(key, &key);
     return 0;
 
 }

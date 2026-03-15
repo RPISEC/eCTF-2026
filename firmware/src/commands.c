@@ -262,15 +262,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
-    recv_resp = malloc(sizeof(*recv_resp));
-    if (recv_resp == NULL) {
-        print_error("Insufficient space to store recv_resp");
-    }
-
-    // zeroize the buffers we will use
-    memset(recv_resp, 0, sizeof(*recv_resp));
     memset(&request, 0, sizeof(request));
-    
 
     // prep request to neighbor
     request.slot = command->read_slot;
@@ -339,11 +331,21 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     print_hex_debug(&shared_key, shared_size);
 
     // receive the response message
+    //
+    recv_resp = malloc(sizeof(*recv_resp));
+    if (recv_resp == NULL) {
+        print_error("Insufficient space to store recv_resp");
+        return -7;
+    }
+
+    memset(recv_resp, 0, sizeof(*recv_resp));
+
     len_recv_msg = sizeof(*recv_resp);
     read_packet(TRANSFER_INTERFACE, &cmd, recv_resp, &len_recv_msg);
     if (cmd != RECEIVE_MSG) {
+        free(recv_resp);
         print_error("Opcode mismatch");
-        return -7;
+        return -8;
     }
 
     print_debug("Received file packet");
@@ -352,8 +354,9 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
                 shared_key, recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                 recv_resp->uuid);
     if (ret < 0) {
+        free(recv_resp);
         print_error("Failed to decrypt received data");
-        return -8;
+        return -9;
     }
 
     print_debug("Decrypted packet");
@@ -362,16 +365,18 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     ret = get_w_pub(&w_pub, chal_ctx.group_id);
     ret = verify_file(&recv_resp->file, w_pub);
     if (ret < 0) {
+        free(recv_resp);
         print_error("Failed to verify file signature");
-        return -9;
+        return -10;
     }
 
     print_debug("Verified file");
 
     // write that file into the file system
     if (write_file(command->write_slot, &recv_resp->file, recv_resp->uuid) < 0) {
+        free(recv_resp);
         print_error("Writing received file failed");
-        return -10;
+        return -11;
     }
 
     print_debug("Wrote file");
@@ -549,6 +554,7 @@ static int handle_receive(receive_request_t *recv_req) {
         uint32_t rand = trng_get_u32();
         if (rand == 0) {
             print_error("TRNG failed");
+            free(recv_resp);
             return -11;
         }
         memcpy(&recv_resp->iv[i * 4], &rand, 4);
@@ -557,6 +563,7 @@ static int handle_receive(receive_request_t *recv_req) {
     metadata = get_file_metadata(recv_req->slot);
     if (metadata == NULL) {
         print_error("Getting metadata failed");
+        free(recv_resp);
         return -12;
     }
 
@@ -564,6 +571,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
     if (read_file(recv_req->slot, &recv_resp->file) < 0) {
         print_error("Failed to read file");
+        free(recv_resp);
         return -13;
     }
 
@@ -573,6 +581,7 @@ static int handle_receive(receive_request_t *recv_req) {
                       recv_resp->uuid);
     if (ret < 0) {
         print_error("Failed to encrypt response");
+        free(recv_resp);
         return -14;
     }
 
@@ -581,6 +590,8 @@ static int handle_receive(receive_request_t *recv_req) {
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, recv_resp, sizeof(*recv_resp));
 
     print_debug("Sent file packet");
+
+    free(recv_resp);
     return 0;
 }
 
