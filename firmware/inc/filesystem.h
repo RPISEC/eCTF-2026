@@ -173,7 +173,7 @@ int read_file(slot_t slot, file_t *dest);
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int verify_file(file_t *file, uint8_t *w_pub);
+int verify_file(file_t *file, const uint8_t *w_pub);
 
 /** @brief Decrypt a file's contents in memory
  *
@@ -182,7 +182,7 @@ int verify_file(file_t *file, uint8_t *w_pub);
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int decrypt_file(file_t *file, uint8_t *k_storage);
+int decrypt_file(file_t *file, const uint8_t *k_storage);
 
 /** @brief Get a read-only pointer to a file's metadata
  *

@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "hardware_crypto.h"
+#include "host_messaging.h"
 #include "ti_msp_dl_config.h"
 
 
@@ -38,7 +39,7 @@
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(const uint8_t *plaintext, size_t len, const uint8_t *key,
+int encrypt_sym(uint8_t *plaintext, size_t len, const uint8_t *key,
                 const uint8_t *iv, uint8_t *auth_tag, const uint8_t *aad,
                 size_t aad_len, uint8_t *ciphertext) {
     Aes *aes; // Context for encryption
@@ -86,8 +87,8 @@ int encrypt_sym(const uint8_t *plaintext, size_t len, const uint8_t *key,
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *iv,
-                uint8_t *auth_tag, uint8_t *aad, size_t aad_len,
+int decrypt_sym(uint8_t *ciphertext, size_t len, const uint8_t *key, const uint8_t *iv,
+                const uint8_t *auth_tag, const uint8_t *aad, size_t aad_len,
                 uint8_t *plaintext) {
     Aes *aes; // Context for encryption
     int ret; // Library result
@@ -129,4 +130,87 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *iv,
 int hash(void *data, size_t len, uint8_t *hash_out) {
     // Pass values to hash
     return wc_Md5Hash((uint8_t *)data, len, hash_out);
+}
+
+/** @brief Signs arbitrary-length data
+ *
+ * @param in A pointer to a buffer of length in_size containing the data
+ *          to be signed
+ * @param in_size The size of the data to sign
+ * @param sig The 64-byte buffer to hold the signature
+ * @param priv The 32-byte ED25519 private signing key
+ * @param pub The 32-byte ED25519 public signing key
+ *
+ * @return 0 on success, non-zero for other error
+ */
+int sign_msg(const uint8_t *in, int in_size, uint8_t *sig, const uint8_t *priv,
+             const uint8_t *pub) {
+    ed25519_key *key;
+    uint32_t sign_len;
+    int ret;
+
+    key = malloc(sizeof(ed25519_key));
+    if (key == NULL) {
+        return -1;
+    }
+    ret = wc_ed25519_import_private_key(priv, 32, pub, 32, key);
+    if (ret < 0) {
+        free(key);
+        return -2;
+    }
+
+    sign_len = 64;
+    ret = wc_ed25519_sign_msg(in, in_size, sig, &sign_len, key);
+    if (sign_len != 64) {
+        return -3;
+    }
+
+    if (ret < 0) {
+        free(key);
+        return -4;
+    }
+
+    free(key);
+    return 0;
+}
+
+/** @brief Verifies a data signature
+ *
+ * @param data A pointer to a buffer of length in_size containing the signed data
+ * @param data_size The size of the data to sign
+ * @param sig The 64-byte signature
+ * @param pub The 32-byte ED25519 public signing key
+ *
+ * @return 0 on success, non-zero for other error
+ */
+int verify_msg(const uint8_t *data, int data_size, const uint8_t *sig, const uint8_t *pub) {
+    ed25519_key *key;
+    int ret, success;
+
+    key = malloc(sizeof(ed25519_key));
+    if (key == NULL) {
+        return -1;
+    }
+
+    ret = wc_ed25519_import_public(pub, 32, key);
+    if (ret < 0) {
+        print_hex_debug(&ret, sizeof(ret));
+        print_hex_debug(pub, 32);
+        print_debug("verify_msg: failed to import key");
+        free(key);
+        return -2;
+    }
+
+
+    ret = wc_ed25519_verify_msg(
+        sig, 64, data,
+        data_size, &success, key);
+    if (ret < 0 || !success) {
+        free(key);
+        return -3;
+    }
+
+    free(key);
+    return 0;
+
 }

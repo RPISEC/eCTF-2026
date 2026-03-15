@@ -11,12 +11,15 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-#include "host_messaging.h"
 #include "commands.h"
 #include "filesystem.h"
+#include "host_messaging.h"
+#include "simple_crypto.h"
+#include "simple_trng.h"
 #include "wallet.h"
 
-#include "trng_test.h"
+#include <wolfssl/wolfcrypt/curve25519.h>
+
 
 /* IMPORTANT COMPONENTS FROM HSM.c */
 // extern file_t hsm_status[MAX_FILE_COUNT];
@@ -246,9 +249,10 @@ int write(uint16_t pkt_len, uint8_t *buf) {
  * @return 0 upon success. A negative value on error.
 */
 int receive(uint16_t pkt_len, uint8_t *buf) {
+    // A side of connection
     receive_command_t *command = (receive_command_t *)buf;
     receive_request_t request;
-    receive_response_t recv_resp;
+    receive_response_t *recv_resp;
     msg_type_t cmd;
     uint16_t len_recv_msg;
     int ret;
@@ -258,34 +262,124 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
+    recv_resp = malloc(sizeof(*recv_resp));
+    if (recv_resp == NULL) {
+        print_error("Insufficient space to store recv_resp");
+    }
+
     // zeroize the buffers we will use
-    memset(&recv_resp, 0, sizeof(recv_resp));
+    memset(recv_resp, 0, sizeof(*recv_resp));
     memset(&request, 0, sizeof(request));
     
 
     // prep request to neighbor
     request.slot = command->read_slot;
 
+    print_debug("Sending request");
     // request the file from the neighboring device
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&request, sizeof(receive_request_t));
 
-    // set essentially no limit to the receive message size
-    len_recv_msg = 0xffff;
+    print_debug("Sent request");
 
-    // recieve the response message
-    read_packet(TRANSFER_INTERFACE, &cmd, &recv_resp, &len_recv_msg);
+    curve25519_key a_priv, b_pub;
+    wc_curve25519_init(&a_priv);
+    WC_RNG rng;
+    wc_InitRng(&rng);
+
+    ret = wc_curve25519_make_key(&rng, 32, &a_priv);
+    if (ret != 0) {
+        print_error("keygen failed");
+        return -2;
+    }
+
+    print_debug("Generated keypair");
+
+    receive_challenge_t chal_ctx;
+    len_recv_msg = sizeof(chal_ctx);
+    read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
     if (cmd != RECEIVE_MSG) {
         print_error("Opcode mismatch");
-        return -1;
+        return -3;
+    }
+    if (chal_ctx.slot != request.slot) {
+        print_error("Slot changed unexpectedly");
+        return -4;
     }
 
-    // write that file into the file system
-    if (write_file(command->write_slot, &recv_resp.file, recv_resp.uuid) < 0) {
-        print_error("Writing received file failed");
-        return -1;
+    print_debug("Received challenge");
+
+    uint32_t keysize = 32;
+    wc_curve25519_export_public(&a_priv, chal_ctx.a_pub, &keysize);
+
+    key32_t c_priv, c_pub;
+    ret = get_c_pub(&c_pub, chal_ctx.group_id);
+    ret = get_c_priv(&c_priv, chal_ctx.group_id);
+    if (ret < 0) {
+        print_error("Could not get receive key.");
+        return -5;
     }
+
+    sign_msg((uint8_t *)&chal_ctx, sizeof(chal_ctx) - 64, chal_ctx.signature, c_priv, c_pub);
+
+    print_debug("Signed challenge");
+    print_hex_debug(&chal_ctx, sizeof(chal_ctx));
+    write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &chal_ctx, sizeof(chal_ctx));
+
+    ret = wc_curve25519_import_public(chal_ctx.b_pub, 32, &b_pub);
+
+    key32_t shared_key;
+    uint32_t shared_size = 32;
+    ret = wc_curve25519_shared_secret(&a_priv, &b_pub, shared_key, &shared_size);
+    if (ret != 0 || shared_size != 32) {
+        print_error("Shared key failed");
+        return -6;
+    }
+
+    print_debug("Generated shared key");
+    print_hex_debug(&shared_key, shared_size);
+
+    // receive the response message
+    len_recv_msg = sizeof(*recv_resp);
+    read_packet(TRANSFER_INTERFACE, &cmd, recv_resp, &len_recv_msg);
+    if (cmd != RECEIVE_MSG) {
+        print_error("Opcode mismatch");
+        return -7;
+    }
+
+    print_debug("Received file packet");
+
+    ret = decrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t),
+                shared_key, recv_resp->iv, recv_resp->auth_tag, NULL, 0,
+                recv_resp->uuid);
+    if (ret < 0) {
+        print_error("Failed to decrypt received data");
+        return -8;
+    }
+
+    print_debug("Decrypted packet");
+
+    key32_t w_pub;
+    ret = get_w_pub(&w_pub, chal_ctx.group_id);
+    ret = verify_file(&recv_resp->file, w_pub);
+    if (ret < 0) {
+        print_error("Failed to verify file signature");
+        return -9;
+    }
+
+    print_debug("Verified file");
+
+    // write that file into the file system
+    if (write_file(command->write_slot, &recv_resp->file, recv_resp->uuid) < 0) {
+        print_error("Writing received file failed");
+        return -10;
+    }
+
+    print_debug("Wrote file");
+
     // empty success message
     write_packet(CONTROL_INTERFACE, RECEIVE_MSG, NULL, 0);
+
+    free(recv_resp);
     return 0;
 }
 
@@ -315,7 +409,7 @@ int interrogate(uint16_t pkt_len, uint8_t *buf) {
     // set essentially no limit to the receive message size
     len_recv_msg = 0xffff;
 
-    // recieve the response message
+    // receive the response message
     read_packet(TRANSFER_INTERFACE, &cmd, &final_list_buf, &len_recv_msg);
     if (cmd != INTERROGATE_MSG) {
         print_error("Opcode mismatch");
@@ -327,6 +421,168 @@ int interrogate(uint16_t pkt_len, uint8_t *buf) {
     return 0;
 }
 
+static int handle_receive(receive_request_t *recv_req) {
+    // B side of connection
+    msg_type_t cmd;
+    pkt_len_t write_length, read_length;
+    receive_challenge_t chal_ctx;
+    const filesystem_entry_t *metadata;
+    int ret;
+    uint16_t len_recv_msg;
+
+    print_debug("Received request");
+
+    memset(&chal_ctx, 0, sizeof(chal_ctx));
+
+    // Verify slot
+    ret = is_slot_in_use(recv_req->slot);
+    if (!ret) {
+        // file does not exist or bad slot received
+        chal_ctx.slot = -1;
+        write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+
+        print_error("Bad slot requested");
+        return -1;
+    }
+    chal_ctx.slot = recv_req->slot;
+
+    print_debug("set slot");
+
+    // Get group id
+    file_headers_t temp_file_headers;
+    ret = get_file_headers(recv_req->slot, &temp_file_headers);
+    if (ret < 0) {
+        chal_ctx.slot = -1;
+        write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+
+        print_error("Bad file");
+        return -2;
+    }
+    chal_ctx.group_id = temp_file_headers.group_id;
+
+    print_debug("set group id");
+    // Generate nonce
+    uint32_t nonce = trng_get_u32();
+    if (nonce == 0) {
+        chal_ctx.slot = -1;
+        write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+
+        print_error("RNG failed");
+        return -3;
+    }
+    chal_ctx.nonce = nonce;
+
+    print_debug("set nonce");
+    // Generate key pair
+    curve25519_key b_priv, a_pub;
+    wc_curve25519_init(&b_priv);
+    WC_RNG rng;
+    wc_InitRng(&rng);
+
+    ret = wc_curve25519_make_key(&rng, 32, &b_priv);
+    if (ret != 0) {
+        chal_ctx.slot = -1;
+        write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+
+        print_error("Keygen failed");
+        return -4;
+    }
+    uint32_t keysize = 32;
+    wc_curve25519_export_public(&b_priv, chal_ctx.b_pub, &keysize);
+
+    print_debug("set key");
+    // Respond to initial request
+    write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+
+    print_debug("sent challenge");
+    read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
+    if (cmd != RECEIVE_MSG) {
+        print_error("Opcode mismatch");
+        return -5;
+    }
+    if (chal_ctx.slot != recv_req->slot || chal_ctx.group_id != temp_file_headers.group_id || chal_ctx.nonce != nonce) {
+        print_error("Mismatch in received data.");
+        return -6;
+    }
+
+    print_debug("received challenge response");
+    // Verify challenge signature
+    key32_t c_pub;
+    ret = get_c_pub(&c_pub, chal_ctx.group_id);
+    ret = verify_msg((uint8_t *)&chal_ctx, sizeof(chal_ctx) - 64,
+                    chal_ctx.signature, c_pub);
+    print_hex_debug(&chal_ctx, sizeof(chal_ctx));
+    if (ret < 0) {
+        print_hex_debug(&ret, sizeof(ret));
+        print_error("Invalid signature received");
+        return -7;
+    }
+
+    print_debug("verified signature");
+    // Derive shared secret
+    ret = wc_curve25519_import_public(chal_ctx.a_pub, 32, &a_pub);
+    if (ret < 0) {
+        print_error("Failed to import public key");
+        return -8;
+    }
+
+    key32_t shared_key;
+    uint32_t shared_size = 32;
+    ret = wc_curve25519_shared_secret(&b_priv, &a_pub, shared_key, &shared_size);
+    if (ret != 0 || shared_size != 32) {
+        print_hex_debug(&ret, sizeof(ret));
+        print_error("Shared key failed");
+        return -9;
+    }
+
+    print_debug("derived shared key");
+    print_hex_debug(&shared_key, shared_size);
+
+    // Read file into response, encrypt response
+    receive_response_t *recv_resp = malloc(sizeof(receive_response_t));
+    if (recv_resp == NULL) {
+        print_error("Insufficient memory for receive response");
+        return -10;
+    }
+
+    for (int i = 0; i < AES_IV_SIZE / 4; i++) {
+        uint32_t rand = trng_get_u32();
+        if (rand == 0) {
+            print_error("TRNG failed");
+            return -11;
+        }
+        memcpy(&recv_resp->iv[i * 4], &rand, 4);
+    }
+
+    metadata = get_file_metadata(recv_req->slot);
+    if (metadata == NULL) {
+        print_error("Getting metadata failed");
+        return -12;
+    }
+
+    memcpy(&recv_resp->uuid, &metadata->uuid, UUID_SIZE);
+
+    if (read_file(recv_req->slot, &recv_resp->file) < 0) {
+        print_error("Failed to read file");
+        return -13;
+    }
+
+    print_debug("Read file");
+    ret = encrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t), shared_key,
+                      recv_resp->iv, recv_resp->auth_tag, NULL, 0,
+                      recv_resp->uuid);
+    if (ret < 0) {
+        print_error("Failed to encrypt response");
+        return -14;
+    }
+
+    print_debug("Encrypted file packet");
+    // Send response
+    write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, recv_resp, sizeof(*recv_resp));
+
+    print_debug("Sent file packet");
+    return 0;
+}
 
 /** @brief Perform the listen operation
  *
@@ -337,9 +593,7 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     msg_type_t cmd;
     pkt_len_t write_length, read_length;
     list_response_t file_list;
-    receive_request_t *command;
-    receive_response_t recv_resp;
-    const filesystem_entry_t *metadata;
+    int ret;
 
     read_length = sizeof(uart_buf);
 
@@ -363,31 +617,9 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
             write_packet(TRANSFER_INTERFACE, INTERROGATE_MSG, &file_list, write_length);
             break;
         case RECEIVE_MSG:
-            // get the request
-            command = (receive_request_t *)uart_buf;
-
-            // TODO: the reference design does not implement *ANY* security
-            // you will want to add something here to comply with SR1
-
-            // if this read fails, the other device will not receive a response and
-            // may need to be reset before further testing can occur
-
-            if (read_file(command->slot, &recv_resp.file) < 0) {
-                print_error("Failed to read file");
-                return -1;
-            }
-
-            metadata = get_file_metadata(command->slot);
-            if (metadata == NULL) {
-                print_error("Getting metadata failed");
-                return -1;
-            }
-
-            memcpy(&recv_resp.uuid, &metadata->uuid, UUID_SIZE);
-
-            // send the file to the neighbor hsm
-            write_length = sizeof(receive_response_t);
-            write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &recv_resp, write_length);
+            ret = handle_receive((receive_request_t *)uart_buf);
+            if (ret < 0)
+                return ret;
             break;
         default:
             print_error("Bad message type");
@@ -398,3 +630,4 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     write_packet(CONTROL_INTERFACE, LISTEN_MSG, NULL, 0);
     return 0;
 }
+

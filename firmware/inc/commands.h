@@ -14,10 +14,12 @@
 #ifndef __COMMANDS_H__
 #define __COMMANDS_H__
 
+#include "hardware_crypto.h"
 #include "stdint.h"
 #include "simple_flash.h"
 #include "filesystem.h"
 #include "secrets.h"
+#include "wallet.h"
 
 #define pkt_len_t uint16_t
 
@@ -77,8 +79,19 @@ typedef struct {
 } receive_request_t;
 
 typedef struct {
+    slot_t slot;
+    group_id_t group_id;
+    uint32_t nonce;
+    key32_t b_pub;
+    key32_t a_pub;
+    uint8_t signature[64];
+} receive_challenge_t;
+
+typedef struct {
+    uint8_t iv[AES_IV_SIZE];
     uint8_t uuid[UUID_SIZE];
     file_t file;
+    uint8_t auth_tag[AES_AUTH_TAG_SIZE];
 } receive_response_t;
 
 typedef struct {

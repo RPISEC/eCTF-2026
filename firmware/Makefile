@@ -56,6 +56,8 @@ OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
 OBJECTS += $(WOLFSSL_INC)/ed25519.o $(WOLFSSL_INC)/sha512.o
 OBJECTS += $(WOLFSSL_INC)/ge_operations.o $(WOLFSSL_INC)/fe_operations.o
 # OBJECTS += $(WOLFSSL_INC)/ge_low_mem.o $(WOLFSSL_INC)/fe_low_mem.o
+OBJECTS += $(WOLFSSL_INC)/curve25519.o
+OBJECTS += $(WOLFSSL_INC)/random.o
 
 # we also need random.o for TRNG testing
 ifeq ($(TRNG_TEST), 1)
