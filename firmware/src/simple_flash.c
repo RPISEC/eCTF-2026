@@ -82,14 +82,23 @@ int flash_simple_write(uint32_t address, void* buffer, uint32_t size) {
     // it also expects it to be an even number
     size_32b = (size_32b % 2 == 0) ? size_32b : size_32b + 1;
 
-    // write the data into a correctly sized region to ensure no undefined behavior
-    uint32_t write_data[size_32b];
-    memset(write_data, 0xff, size_32b*4);
-    memcpy(write_data, buffer, size);
+    uint32_t size_extra = 0;
+    uint8_t data_extra[8];
+
+    // If the full data size is not divisible by 8, we need to copy the last few
+    // bytes into an 8-byte array and write them separately. This avoids copying
+    // the full buffer (too expensive).
+    if (size_32b * 4 > size) {
+        size_extra = size_32b * 4 - size;
+        memset(data_extra, 0xff, 8);
+        memcpy(data_extra, buffer + size - size_extra, size_extra);
+
+        size_32b -= 2;
+    }
 
     // if memory section is corrected, make sure to write the ECC (you have been warned)
     cmdStatus = DL_FlashCTL_programMemoryBlockingFromRAM64WithECCGenerated(
-        FLASHCTL, address, (uint32_t *)write_data, size_32b, DL_FLASHCTL_REGION_SELECT_MAIN
+        FLASHCTL, address, (uint32_t *)buffer, size_32b, DL_FLASHCTL_REGION_SELECT_MAIN
     );
     if (cmdStatus == DL_FLASHCTL_COMMAND_STATUS_FAILED) {
         return -1;
@@ -99,5 +108,19 @@ int flash_simple_write(uint32_t address, void* buffer, uint32_t size) {
     if (ret == false) {
         return -1;
     }
+
+    if (size_extra != 0) {
+        cmdStatus = DL_FlashCTL_programMemoryBlockingFromRAM64WithECCGenerated(
+            FLASHCTL, address + (4 * size_32b), (uint32_t *)data_extra, 2,
+            DL_FLASHCTL_REGION_SELECT_MAIN);
+        if (cmdStatus == DL_FLASHCTL_COMMAND_STATUS_FAILED) {
+            return -1;
+        }
+        // returns a boolean, so handle that accordingly
+        if (ret == false) {
+            return -1;
+        }
+    }
+
     return 0;
 }

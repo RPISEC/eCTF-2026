@@ -11,11 +11,12 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-#ifndef __FILESYSTEM__
-#define __FILESYSTEM__
+#ifndef __FILESYSTEM_H__
+#define __FILESYSTEM_H__
 
 #include <stdbool.h>
 #include "simple_flash.h"
+#include "hardware_crypto.h"
 
 // #include "commands.h"
 
@@ -80,22 +81,28 @@ The reference design allocates files for each slot as follows:
 // Calculate the total size of a file in flash, including its metadata
 #define FILE_TOTAL_SIZE(len) len + offsetof(file_t, contents)
 
-// Each file will be 9 pages in size. 8 pages for the file contents + 1 page for
-// metadata
-#define FILE_PAGE_COUNT 9
+// Each file will take up a whole number of pages
+#define FILE_PAGE_COUNT ((sizeof(file_t) + (FLASH_PAGE_SIZE - 1)) / FLASH_PAGE_SIZE)
 #define STORED_FILE_SIZE FLASH_PAGE_SIZE*FILE_PAGE_COUNT
 
 // first flash address for files
-#define FILES_START_ADDR 0x10000
+#define FILES_START_ADDR 0x28000
 
 #define FILE_IN_USE 0xdeadbeef
 // used to actually define the file object
-typedef struct {
-    uint32_t in_use;  // FILE_IN_USE if in use
+typedef struct __attribute__((packed)) {
+    uint32_t in_use; // FILE_IN_USE if in use
     group_id_t group_id;
-    char name[MAX_NAME_SIZE];
     uint16_t contents_len;
-    uint8_t contents[MAX_CONTENTS_SIZE];
+    uint8_t iv[AES_IV_SIZE];
+    uint8_t auth_tag[AES_AUTH_TAG_SIZE];
+    char name[MAX_NAME_SIZE]; // must be at the end of the struct to match read packet format
+} file_headers_t;
+
+typedef struct __attribute__((packed)) {
+    file_headers_t headers;
+    uint8_t contents[MAX_CONTENTS_SIZE]; // encrypted
+    uint8_t signature[64];
 } file_t;
 
 /** @brief Initialize the filesystem
@@ -121,7 +128,26 @@ bool is_slot_in_use(slot_t slot);
 */
 int create_file(file_t *dest, group_id_t group_id, char *name, uint16_t contents_len, uint8_t *contents);
 
-/** @brief Create a new file object in memory
+/** @brief Encrypt a file in memory
+ *
+ *  @param file The file to encrypt
+ *  @param k_storage The AES 256-bit key to use for encryption
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int encrypt_file(file_t *file, const uint8_t *k_storage);
+
+/** @brief Sign a file in memory
+ *
+ *  @param file The file to sign
+ *  @param w_priv The ED25519 256-bit private key
+ *  @param w_pub The ED25519 256-bit public key
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub);
+
+/** @brief Create a new file object on flash
  *
  *  @param slot The slot to write the file to
  *  @param src The sourc file to store
@@ -129,7 +155,7 @@ int create_file(file_t *dest, group_id_t group_id, char *name, uint16_t contents
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int write_file(slot_t slot, file_t *src, uint8_t *uuid);
+int write_file(slot_t slot, file_t *src, const uint8_t *uuid);
 
 /** @brief Read a file from persistent storage into memory
  *
@@ -140,6 +166,23 @@ int write_file(slot_t slot, file_t *src, uint8_t *uuid);
 */
 int read_file(slot_t slot, file_t *dest);
 
+/** @brief Verify a file's signature in memory
+ *
+ *  @param file The file to verify.
+ *  @param w_pub The ED25519 256-bit public key.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int verify_file(file_t *file, uint8_t *w_pub);
+
+/** @brief Decrypt a file's contents in memory
+ *
+ *  @param file The file to decrypt.
+ *  @param dest The AES 256-bit key to decrypt with.
+ *
+ * @return 0 upon success. A negative value otherwise.
+*/
+int decrypt_file(file_t *file, uint8_t *k_storage);
 
 /** @brief Get a read-only pointer to a file's metadata
  *
@@ -149,4 +192,12 @@ int read_file(slot_t slot, file_t *dest);
 */
 const filesystem_entry_t *get_file_metadata(slot_t slot);
 
-#endif
+/** @brief Get a read-only pointer to the file's header. The contents will
+ *         be filled with garbage data and should not be accessed.
+ * 
+ * @param slot The slot to get headers for.
+ * 
+ */
+const int get_file_headers(slot_t slot, file_headers_t *file_headers);
+
+#endif // __FILESYSTEM_H__

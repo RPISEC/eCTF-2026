@@ -1,5 +1,5 @@
-#ifndef __SIMPLE_TRNG__
-#define __SIMPLE_TRNG__
+#ifndef __SIMPLE_TRNG_H__
+#define __SIMPLE_TRNG_H__
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -12,5 +12,5 @@ bool trng_init(void);
 uint32_t trng_get_u32(void);
 void trng_shutdown(void);
 
-#endif // __SIMPLE_TRNG__
+#endif // __SIMPLE_TRNG_H__
 

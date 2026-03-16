@@ -12,48 +12,55 @@ LINKERFILE = "firmware.ld"
 # Perform AES tests
 AES_TEST = 0
 
+# Perform TRNG tests
+TRNG_TEST = 0
+
 OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_uart.so \
     $(BUILDDIR)/ti_msp_dl_config.so \
     $(BUILDDIR)/startup_mspm0l222x_ticlang.so \
     $(BUILDDIR)/simple_flash.so \
     $(BUILDDIR)/host_messaging.so \
-    $(BUILDDIR)/security.so \
     $(BUILDDIR)/filesystem.so \
     $(BUILDDIR)/commands.so \
     $(BUILDDIR)/simple_trng.so \
-    $(BUILDDIR)/hardware_crypto.so
+    $(BUILDDIR)/simple_crypto.so \
+    $(BUILDDIR)/hardware_crypto.so \
+    $(BUILDDIR)/wallet.so \
+    $(BUILDDIR)/timeout.so \
+    $(BUILDDIR)/timer.so \
+    $(BUILDDIR)/memory_tools.so
 
 ifeq ($(AES_TEST), 1)
 OBJECTS +=$(BUILDDIR)/aes_test.so
 CFLAGS += -DAES_TEST=1
 endif
 
+ifeq ($(TRNG_TEST), 1)
+OBJECTS +=$(BUILDDIR)/trng_test.so
+CFLAGS += -DTRNG_TEST=1
+endif
 
-# change C flags
-CFLAGS += -DNO_WOLFSSL_DIR
-CFLAGS += -DWOLFSSL_AES_DIRECT
-CFLAGS += -DSINGLE_THREADED
-# From https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html#building-with-gcc-arm
-CFLAGS += -DHAVE_PK_CALLBACKS
-CFLAGS += -DWOLFSSL_USER_IO
-CFLAGS += -DNO_WRITEV -DTIME_T_NOT_64BIT
-CFLAGS += -DNO_FILESYSTEM
-# tells wolfssl that we will handle RNG on the baremetal target
-CFLAGS += -DNO_DEV_RANDOM
-CFLAGS += -DWC_NO_DEFAULT_DEVID
-CFLAGS += -DWOLF_CRYPTO_CB
-CFLAGS += -DWOLFSSL_SMALL_STACK
-CFLAGS += -DWOLFCRYPT_ONLY # we only need the wolfcrypt library, not all of wolfssl
-CFLAGS += -DHAVE_AESGCM
-CFLAGS += -DMAX_CRYPTO_DEVID_CALLBACKS=2  # one for the trng and one for the hardware crypto accelerator
+# specify wolfcrypt settings in user_settings.h
+CFLAGS += -DWOLFSSL_USER_SETTINGS
 
-WOLFSSL_INC = wolfssl/wolfcrypt/src
-CFLAGS += -I./wolfssl
+WOLFSSL_INC = /opt/wolfssl/wolfcrypt/src
+CFLAGS += -I/opt/wolfssl
 
 # needed for wolfcrypt
 OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/cryptocb.o
-OBJECTS += $(WOLFSSL_INC)/wc_port.o
+OBJECTS += $(WOLFSSL_INC)/wc_port.o $(WOLFSSL_INC)/pwdbased.o
+OBJECTS += $(WOLFSSL_INC)/memory.o $(WOLFSSL_INC)/hash.o
+OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
+OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
+OBJECTS += $(WOLFSSL_INC)/ed25519.o $(WOLFSSL_INC)/sha512.o
+OBJECTS += $(WOLFSSL_INC)/ge_operations.o $(WOLFSSL_INC)/fe_operations.o
+# OBJECTS += $(WOLFSSL_INC)/ge_low_mem.o $(WOLFSSL_INC)/fe_low_mem.o
+
+# we also need random.o for TRNG testing
+ifeq ($(TRNG_TEST), 1)
+OBJECTS += $(WOLFSSL_INC)/random.o
+endif
 
 NAME = hsm
 
@@ -67,7 +74,8 @@ CFLAGS += -I.. \
     -mcpu=cortex-m0plus \
     -march=thumbv6m \
     -mfloat-abi=soft \
-    -mthumb
+    -mthumb \
+    -fstack-usage
 
 LFLAGS += "-l$(MSPM0_SDK_INSTALL_DIR)/source/ti/drivers/lib/ticlang/m0p/drivers_mspm0l122x_l222x.a" \
     "-l$(MSPM0_SDK_INSTALL_DIR)/kernel/nortos/lib/ticlang/m0p/nortos_mspm0l122x_l222x.a" \

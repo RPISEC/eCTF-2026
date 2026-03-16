@@ -19,19 +19,27 @@
 
 #include <wolfssl/wolfcrypt/wc_port.h>
 
-#include "simple_flash.h"
 #include "host_messaging.h"
 #include "commands.h"
 #include "filesystem.h"
+#include <ti/driverlib/m0p/dl_interrupt.h>
 #include "ti_msp_dl_config.h"
 #include "status_led.h"
 #include "simple_uart.h"
 #include "hardware_crypto.h"
 #include "macros.h"
 #include "simple_trng.h"
+#include "wallet.h"
+#include "timer.h"
+#include "timeout.h"
+#include "memory_tools.h"
 
 #ifdef AES_TEST
 #include "aes_test.h"
+#endif
+
+#ifdef TRNG_TEST
+#include "trng_test.h"
 #endif
 
 
@@ -52,12 +60,15 @@ static unsigned char uart_buf[MAX_MSG_SIZE];
 /** @brief Initializes peripherals for system boot.
 */
 void init() {
+    init_stack_guard();
+
     // Initialize all of the hardware components
     SYSCFG_DL_init();
 
     // need to initialize wolfcrypt before initializing wolfcrypt-dependent components
-    wolfCrypt_Init();
-    print_debug("wolfCrypt initialized\n");
+    if (wolfCrypt_Init() < 0) {
+        print_debug("wolfcrypt init error");
+    };
 
     if(!trng_init()) {
         print_debug("trng init error");
@@ -67,7 +78,13 @@ void init() {
         print_debug("hardware crypto init error");
     }
 
+    if  (!init_timer()) {
+        print_debug("timer init error");
+    }
+
     init_fs();
+
+    timeout(TIMEOUT_BOOT);
 }
 
 /**********************************************************
@@ -86,10 +103,15 @@ int main(void) {
     // process commands forever
     while (1) {
         print_debug("Ready\n");
+        if (stack_overflow_detected()) {
+            print_error("!!! STACK OVERFLOW DETECTED !!!");
+            Default_Handler();
+        }
 
         STATUS_LED_ON();
 
         pkt_len = 0;
+        memset(uart_buf, 0, sizeof(uart_buf));
         result = read_packet(CONTROL_INTERFACE, &cmd, uart_buf, &pkt_len);
 
         IF (result != MSG_OK)
@@ -123,6 +145,9 @@ int main(void) {
             test_aes_gcm();
             test_aes_gcm_errors();
             #endif // AES_TEST
+            #ifdef TRNG_TEST
+            test_trng_callback();
+            #endif // TRNG_TEST
             list(pkt_len, uart_buf);
             break;
 

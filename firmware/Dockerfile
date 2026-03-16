@@ -41,6 +41,11 @@ RUN if [ $(uname -m) = "x86_64" ]; then \
     ./ti_cgt_armllvm_4.0.3.LTS_linux_installer.bin --mode unattended --prefix /opt && \
     rm -f ti_cgt_armllvm_4.0.3.LTS_linux_installer.bin
 
+# Install wolfcrypt
+RUN wget https://github.com/wolfSSL/wolfssl/archive/refs/tags/v5.8.4-stable.tar.gz && \
+    tar -xzf v5.8.4-stable.tar.gz -C /opt && \
+    ln -s wolfssl-5.8.4-stable /opt/wolfssl
+
 WORKDIR /hsm
 
 ENTRYPOINT ["bash", "/hsm/build.sh"]

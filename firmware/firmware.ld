@@ -32,7 +32,8 @@
 
 *****************************************************************************/
 -uinterruptVectors
---stack_size=256
+--stack_size=4096
+--heap_size=16384
 
 #define FLASH_BASE 0x6000
 
@@ -40,9 +41,10 @@ MEMORY
 {
     /* Divide this in half and allocate the first half to user space and the second reserved */
     BOOTLOADER      (RX)  : origin = 0x00000000, length = 0x00006000 /* Bootloader flash */
-    FLASH           (RX)  : origin = 0x00006000, length = 0x00034000 /* Location of team firmware */
+    FLASH           (RX)  : origin = 0x00006000, length = 0x00022000 /* Location of team firmware */
+    FILES           (RW)  : origin = 0x00028000, length = 0x00012000 /* Location of HSM files */ 
     FAT             (RW)  : origin = 0x0003A000, length = 0x00000400 /* Used to store tag, length, pointer values for files */
-    APP2            (RX)  : origin = 0x0003A400, length = 0x00005c00 /* Location of team firmware */
+    APP2            (R)  : origin = 0x0003A400, length = 0x00005c00 /* Location of team firmware */
     SRAM            (RWX) : origin = 0x20200000, length = 0x00008000
     BCR_CONFIG      (R)   : origin = 0x41C00000, length = 0x000000FF
     BSL_CONFIG      (R)   : origin = 0x41C00100, length = 0x00000080
@@ -59,14 +61,21 @@ SECTIONS
     .ARM.exidx    : palign(8) {} > FLASH
     .init_array   : palign(8) {} > FLASH
     .binit        : palign(8) {} > FLASH
-    .files        : palign(8)
     .TI.ramfunc   : load = FLASH, palign(8), run=SRAM, table(BINIT)
+    .files        : palign(8) {} > FILES
+    .wallet       : palign(8) {} > APP2
 
     .vtable :   > SRAM
     .args   :   > SRAM
     .data   :   > SRAM
     .bss    :   > SRAM
     .sysmem :   > SRAM
+    .stack_guard (NOLOAD) :
+    {
+        __stack_guard_start = .;
+        . += 64;
+        __stack_guard_end = .;
+    } > SRAM (HIGH)
     .stack  :   > SRAM (HIGH)
 
     .BCRConfig  : {} > BCR_CONFIG
