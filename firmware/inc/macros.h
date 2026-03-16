@@ -2,6 +2,7 @@
 #define MACROS_H_
 
 #include <stdint.h>
+#include <simple_trng.h>
 
 #define CONCAT_INNER(x, y) x ## y
 #define CONCAT(x, y) CONCAT_INNER(x, y)
