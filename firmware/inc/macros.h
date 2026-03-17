@@ -7,6 +7,11 @@
 #define CONCAT_INNER(x, y) x ## y
 #define CONCAT(x, y) CONCAT_INNER(x, y)
 
+
+/**
+ * @brief Check a conditional multiple times. Use in critical if statements
+ *        so jumps cannot be skipped by voltage fault injection
+ */
 #define IF(x) {                                 \
     volatile uint8_t CONCAT(result, __LINE__) = x;      \
     CONCAT(result, __LINE__) = x;               \
@@ -22,6 +27,10 @@
     }                                           \
 }
 
+/**
+ * @brief Wait for a random amount of time. Use before critical sections to
+ *        disrupt timing attacks, such as voltage fault injection.
+ */
 #define JITTER do {                                                     \
         volatile uint32_t CONCAT(val, __LINE__) = trng_get_u32() % 42;  \
         for (uint32_t CONCAT(i, __LINE__) = 0; CONCAT(i, __LINE__) < CONCAT(val, __LINE__); CONCAT(i, __LINE__)++, CONCAT(val, __LINE__) = trng_get_u32() % 42) { \
