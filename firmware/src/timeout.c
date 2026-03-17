@@ -8,6 +8,7 @@
 #include "timeout.h"
 #include "timer.h"
 #include "simple_flash.h"
+#include "macros.h"
 
 /**
  * @brief Times out the user for `time` millseconds, and sets a persistent flag.
@@ -18,6 +19,6 @@
 void timeout(int time) {
     reset_timer();
     while (get_timer_ms() < time) {
-        // TODO jitter to avoid skipping the jump.
+        JITTER;
     }
 }

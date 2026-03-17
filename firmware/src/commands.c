@@ -15,6 +15,7 @@
 #include "commands.h"
 #include "filesystem.h"
 #include "wallet.h"
+#include "macros.h"
 
 #include "trng_test.h"
 
@@ -66,11 +67,13 @@ int list(uint16_t pkt_len, uint8_t *buf) {
     list_command_t *command = (list_command_t*)buf;
     static list_response_t file_list;
 
+    JITTER;
     memset(&file_list, 0, sizeof(file_list));
 
     // copy relevant fields into the final struct
     generate_list_files(&file_list);
 
+    JITTER;
     if (!check_pin(command->pin)) {
         print_error("Invalid pin");
         return -1;
@@ -96,6 +99,7 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     key32_t k_storage, w_pub;
     int ret;
 
+    JITTER;
     if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
@@ -123,6 +127,7 @@ int read(uint16_t pkt_len, uint8_t *buf) {
         return -4;
     }
 
+    JITTER;
     wallet_lock();
 
     ret = read_file(command->slot, curr_file);
@@ -146,6 +151,7 @@ int read(uint16_t pkt_len, uint8_t *buf) {
         return -7;
     }
 
+    JITTER;
     memset(k_storage, 0, AES_KEY_SIZE);
 
 
@@ -175,6 +181,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     file_t *curr_file;
     key32_t k_storage, w_priv, w_pub;
 
+    JITTER;
     if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
@@ -193,6 +200,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         print_error("Invalid permission");
     }
 
+    JITTER;
     wallet_lock();
 
     curr_file = malloc(sizeof(file_t));
@@ -228,6 +236,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         return -3;
     }
 
+    JITTER;
     memset(k_storage, 0, sizeof(key32_t));
     memset(w_priv, 0, sizeof(key32_t));
 
@@ -253,12 +262,14 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     uint16_t len_recv_msg;
     int ret;
 
+    JITTER;
     if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
     }
 
     // zeroize the buffers we will use
+    JITTER;
     memset(&recv_resp, 0, sizeof(recv_resp));
     memset(&request, 0, sizeof(request));
     
@@ -344,12 +355,14 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     read_length = sizeof(uart_buf);
 
     // Receive a packet from a neighboring hsm
+    JITTER;
     memset(uart_buf, 0, sizeof(uart_buf));
     read_packet(TRANSFER_INTERFACE, &cmd, uart_buf, &read_length);
 
     switch (cmd) {
         case INTERROGATE_MSG:
             // zeroize the buffers we will use
+            JITTER;
             memset(&file_list, 0, sizeof(file_list));
 
             // generate a list of files for the other device

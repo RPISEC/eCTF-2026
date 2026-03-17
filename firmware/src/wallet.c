@@ -3,6 +3,7 @@
 
 #include "secrets.h"
 #include "wallet.h"
+#include "macros.h"
 #include "simple_crypto.h"
 
 typedef uint8_t key32_t[32];
@@ -58,6 +59,7 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
 
     ret = wc_PBKDF2(pin_key, pin, 6, wallet->pin_salt, PIN_SALT_LEN,
                     WALLET_ITERS, sizeof(key32_t), WC_HASH_TYPE_SHA256);
+    JITTER;
     if (ret != 0) {
         return -1;
     }
