@@ -113,43 +113,49 @@ int read(uint16_t pkt_len, uint8_t *buf) {
 
     get_file_headers(command->slot, &curr_file->headers);
 
-    if (!wallet_has_perms(curr_file->headers.group_id, PERM_R)) {
+    ret = wallet_has_perms(curr_file->headers.group_id, PERM_R);
+    IF (!ret) {
         print_error("Invalid permission");
         free(curr_file);
         return -3;
     }
+    ENDIF
 
     ret = get_w_pub(&w_pub, curr_file->headers.group_id);
     ret = get_k_storage(&k_storage, curr_file->headers.group_id);
-    if (ret < 0) {
+    IF (ret < 0) {
         print_error("Invalid key");
         free(curr_file);
         return -4;
     }
+    ENDIF
 
     JITTER;
     wallet_lock();
 
     ret = read_file(command->slot, curr_file);
-    if (ret < 0) {
+    IF (ret < 0) {
         print_error("Failed to read file");
         free(curr_file);
         return -5;
     }
+    ENDIF
 
     ret = verify_file(curr_file, w_pub);
-    if (ret < 0) {
+    IF (ret < 0) {
         print_error("Failed to verify file");
         free(curr_file);
         return -6;
     }
+    ENDIF
 
     ret = decrypt_file(curr_file, k_storage);
-    if (ret < 0) {
+    IF (ret < 0) {
         print_error("Failed to decrypt file");
         free(curr_file);
         return -7;
     }
+    ENDIF
 
     JITTER;
     memset(k_storage, 0, AES_KEY_SIZE);
@@ -217,24 +223,30 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         command->contents
     );
 
-    if (encrypt_file(curr_file, k_storage) < 0) {
+    ret = encrypt_file(curr_file, k_storage);
+    IF (ret < 0) {
         print_error("Error encrypting file");
         free(curr_file);
         return -1;
     }
+    ENDIF
 
-    if (sign_file(curr_file, w_priv, w_pub) < 0) {
+    ret = sign_file(curr_file, w_priv, w_pub);
+    IF (ret < 0) {
         print_error("Error signing file");
         free(curr_file);
         return -2;
     }
+    ENDIF
 
     // Store the file persistently
-    if (write_file(command->slot, curr_file, command->uuid) < 0) {
+    ret = write_file(command->slot, curr_file, command->uuid);
+    IF (ret < 0) {
         print_error("Error storing file");
         free(curr_file);
         return -3;
     }
+    ENDIF
 
     JITTER;
     memset(k_storage, 0, sizeof(key32_t));
