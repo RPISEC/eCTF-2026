@@ -89,8 +89,10 @@ The reference design allocates files for each slot as follows:
 #define FILES_START_ADDR 0x28000
 
 #define FILE_IN_USE 0xdeadbeef
-// used to actually define the file object
-typedef struct __attribute__((packed)) {
+
+// Packing via pragma to avoid compiler warnings about field alignment.
+#pragma pack(push, 1)
+typedef struct {
     uint32_t in_use; // FILE_IN_USE if in use
     group_id_t group_id;
     uint16_t contents_len;
@@ -99,12 +101,13 @@ typedef struct __attribute__((packed)) {
     char name[MAX_NAME_SIZE]; // must be at the end of the struct to match read packet format
 } file_headers_t;
 
-typedef struct __attribute__((packed)) {
+typedef struct {
     file_headers_t headers;
     uint8_t contents[MAX_CONTENTS_SIZE]; // encrypted
     uint8_t signature[72];
     uint32_t sig_len; // must be aligned!
 } file_t;
+#pragma pack(pop)
 
 /** @brief Initialize the filesystem
  *

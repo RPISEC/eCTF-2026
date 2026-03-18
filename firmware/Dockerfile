@@ -46,6 +46,9 @@ RUN wget https://github.com/wolfSSL/wolfssl/archive/refs/tags/v5.8.4-stable.tar.
     tar -xzf v5.8.4-stable.tar.gz -C /opt && \
     ln -s wolfssl-5.8.4-stable /opt/wolfssl
 
+# Patch Wolfcrypt to force compilation of _sp_mulmod with a custom #define
+RUN sed -i '12142s/$/ || defined(SP_MULMOD)/' /opt/wolfssl/wolfcrypt/src/sp_int.c
+
 WORKDIR /hsm
 
 ENTRYPOINT ["bash", "/hsm/build.sh"]

@@ -47,4 +47,9 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 #define USE_FAST_MATH
 #define GCM_TABLE_4BIT
 
+// Custom #define to ensure _sp_mulmod is compiled (not included otherwise, maybe wolfcrypt bug?)
+#define SP_MULMOD
+
+#define HAVE_STRINGS_H
+
 #endif // __USER_SETTINGS_H__
