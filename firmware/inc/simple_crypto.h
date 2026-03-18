@@ -23,7 +23,6 @@
 /******************************** MACRO DEFINITIONS ********************************/
 #define BLOCK_SIZE AES_BLOCK_SIZE
 // #define KEY_SIZE 16
-#define HASH_SIZE MD5_DIGEST_SIZE
 
 /******************************** FUNCTION PROTOTYPES ********************************/
 /** @brief Encrypts plaintext using a symmetric cipher
@@ -60,40 +59,30 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, const uint8_t *key, const uint8
                 const uint8_t *auth_tag, const uint8_t *aad, size_t aad_len,
                 uint8_t *plaintext);
 
-/** @brief Hashes arbitrary-length data
- *
- * @param data A pointer to a buffer of length len containing the data
- *           to be hashed
- * @param len The length of the plaintext to hash
- * @param hash_out A pointer to a buffer of length HASH_SIZE (16 bytes) where the resulting
- *           hash output will be written to
- *
- * @return 0 on success, non-zero for other error
- */
-int hash(void *data, size_t len, uint8_t *hash_out);
-
 /** @brief Signs arbitrary-length data
  *
  * @param in A pointer to a buffer of length in_size containing the data
  *          to be signed
  * @param in_size The size of the data to sign
- * @param sig The 64-byte buffer to hold the signature
- * @param priv The 32-byte ED25519 private signing key
- * @param pub The 32-byte ED25519 public signing key
+ * @param sig The 72-byte buffer to hold the signature
+ * @param sig_len A pointer to the signature length to be stored
+ * @param priv The 32-byte P256 private signing key
+ * @param pub The 33-byte P256 public signing key
  *
  * @return 0 on success, non-zero for other error
  */
-int sign_msg(const uint8_t *in, int in_size, uint8_t *sig, const uint8_t *priv,
-             const uint8_t *pub);
+int sign_msg(const uint8_t *in, int in_size, uint8_t *sig, uint32_t *sig_len,
+             const uint8_t *priv, const uint8_t *pub);
 
 /** @brief Verifies a data signature
  *
  * @param data A pointer to a buffer of length in_size containing the signed data
  * @param data_size The size of the data to sign
- * @param sig The 64-byte signature
- * @param pub The 32-byte ED25519 public signing key
+ * @param sig The signature of length sig-len
+ * @param sig_len The signature length
+ * @param pub The 33-byte P256 public signing key
  *
  * @return 0 on success, non-zero for other error
  */
-int verify_msg(const uint8_t *data, int data_size, const uint8_t *sig, const uint8_t *pub);
+int verify_msg(const uint8_t *data, int data_size, const uint8_t *sig, uint32_t sig_len, const uint8_t *pub);
 #endif // __SIMPLE_CRYPTO_H__

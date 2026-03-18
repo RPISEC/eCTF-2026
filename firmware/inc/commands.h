@@ -16,9 +16,7 @@
 
 #include "hardware_crypto.h"
 #include "stdint.h"
-#include "simple_flash.h"
 #include "filesystem.h"
-#include "secrets.h"
 #include "wallet.h"
 
 #define pkt_len_t uint16_t
@@ -78,13 +76,15 @@ typedef struct {
     slot_t slot;
 } receive_request_t;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     slot_t slot;
+    uint8_t __padding; // alignment is off otherwise
     group_id_t group_id;
     uint32_t nonce;
     key32_t b_pub;
     key32_t a_pub;
-    uint8_t signature[64];
+    uint8_t signature[72];
+    uint32_t sig_len;
 } receive_challenge_t;
 
 typedef struct {

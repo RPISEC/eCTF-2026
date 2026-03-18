@@ -17,7 +17,7 @@ import secrets
 from pathlib import Path
 
 from loguru import logger
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 
 
@@ -43,37 +43,29 @@ def gen_secrets(groups: list[int]) -> bytes:
     }
 
     for group_id in groups:
-        c_private = Ed25519PrivateKey.generate()
+        c_private = ec.generate_private_key(ec.SECP256R1())
         c_public = c_private.public_key()
-        w_private = Ed25519PrivateKey.generate()
+        w_private = ec.generate_private_key(ec.SECP256R1())
         w_public = w_private.public_key()
         k_storage = secrets.token_bytes(32)
 
-        c_priv_raw = c_private.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
+        c_priv_raw = c_private.private_numbers().private_value.to_bytes(32, "big")
         c_pub_raw = c_public.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.CompressedPoint,
         )
-        w_priv_raw = w_private.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
+        w_priv_raw = w_private.private_numbers().private_value.to_bytes(32, "big")
         w_pub_raw = w_public.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.CompressedPoint,
         )
 
         if len(k_storage) != 32:
             raise ValueError("k_storage must be 32 bytes")
-        if len(c_priv_raw) != 32 or len(c_pub_raw) != 32:
-            raise ValueError("c_* Ed25519 keys must be 32 bytes")
-        if len(w_priv_raw) != 32 or len(w_pub_raw) != 32:
-            raise ValueError("w_* Ed25519 keys must be 32 bytes")
+        if len(c_priv_raw) != 32 or len(w_priv_raw) != 32:
+            raise ValueError("*_priv ECC keys must be 32 bytes")
+        if len(c_pub_raw) != 33 or len(w_pub_raw) != 33:
+            raise ValueError("*_pub ECC keys must be 33 bytes")
 
         secrets_data["groups"][f"{group_id:04x}"] = {
             "k_storage": k_storage.hex(),
@@ -91,8 +83,7 @@ def gen_secrets(groups: list[int]) -> bytes:
 
 
 def parse_args():
-    """Define and parse the command line arguments
-    """
+    """Define and parse the command line arguments"""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--force",

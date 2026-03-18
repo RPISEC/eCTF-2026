@@ -97,7 +97,8 @@ int list(uint16_t pkt_len, uint8_t *buf) {
 int read(uint16_t pkt_len, uint8_t *buf) {
     read_command_t *command = (read_command_t*)buf;
     file_t *curr_file;
-    key32_t k_storage, w_pub;
+    key32_t k_storage;
+    key33_t w_pub;
     int ret;
 
     if (wallet_unlock(command->pin)) {
@@ -177,7 +178,8 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     write_command_t *command = (write_command_t*)buf;
     int ret;
     file_t *curr_file;
-    key32_t k_storage, w_priv, w_pub;
+    key32_t k_storage, w_priv;
+    key33_t w_pub;
 
     if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
@@ -258,7 +260,6 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     uint16_t len_recv_msg;
     int ret;
 
-    reset_timer();
     if (wallet_unlock(command->pin)) {
         print_error("Invalid pin");
         return -1;
@@ -274,6 +275,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     // request the file from the neighboring device
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&request, sizeof(receive_request_t));
+    reset_timer();
 
     print_debug("Sent request");
     print_time();
@@ -310,7 +312,8 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     uint32_t keysize = 32;
     wc_curve25519_export_public(&a_priv, chal_ctx.a_pub, &keysize);
 
-    key32_t c_priv, c_pub;
+    key32_t c_priv;
+    key33_t c_pub;
     ret = get_c_pub(&c_pub, chal_ctx.group_id);
     ret = get_c_priv(&c_priv, chal_ctx.group_id);
     if (ret < 0) {
@@ -318,12 +321,14 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -5;
     }
 
-    sign_msg((uint8_t *)&chal_ctx, sizeof(chal_ctx) - 64, chal_ctx.signature, c_priv, c_pub);
+    sign_msg((uint8_t *)&chal_ctx,
+             sizeof(chal_ctx) - sizeof(chal_ctx.signature) -
+                 sizeof(chal_ctx.sig_len),
+             chal_ctx.signature, &chal_ctx.sig_len, c_priv, c_pub);
 
     print_debug("Signed challenge");
     print_time();
 
-    print_hex_debug(&chal_ctx, sizeof(chal_ctx));
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &chal_ctx, sizeof(chal_ctx));
 
     ret = wc_curve25519_import_public(chal_ctx.b_pub, 32, &b_pub);
@@ -337,7 +342,6 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Generated shared key");
-    print_hex_debug(&shared_key, shared_size);
     print_time();
 
     // receive the response message
@@ -373,7 +377,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     print_debug("Decrypted packet");
     print_time();
 
-    key32_t w_pub;
+    key33_t w_pub;
     ret = get_w_pub(&w_pub, chal_ctx.group_id);
     ret = verify_file(&recv_resp->file, w_pub);
     if (ret < 0) {
@@ -449,8 +453,6 @@ static int handle_receive(receive_request_t *recv_req) {
     int ret;
     uint16_t len_recv_msg;
 
-    reset_timer();
-
     print_debug("Received request");
     print_time();
 
@@ -524,6 +526,8 @@ static int handle_receive(receive_request_t *recv_req) {
     write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
 
     print_debug("sent challenge");
+    print_time();
+
     read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
     if (cmd != RECEIVE_MSG) {
         print_error("Opcode mismatch");
@@ -540,11 +544,11 @@ static int handle_receive(receive_request_t *recv_req) {
     print_time();
 
     // Verify challenge signature
-    key32_t c_pub;
+    key33_t c_pub;
     ret = get_c_pub(&c_pub, chal_ctx.group_id);
-    ret = verify_msg((uint8_t *)&chal_ctx, sizeof(chal_ctx) - 64,
-                    chal_ctx.signature, c_pub);
-    print_hex_debug(&chal_ctx, sizeof(chal_ctx));
+    ret = verify_msg((uint8_t *)&chal_ctx,
+                     sizeof(chal_ctx) - sizeof(chal_ctx.signature) - sizeof(chal_ctx.sig_len),
+                     chal_ctx.signature, chal_ctx.sig_len, c_pub);
     if (ret < 0) {
         print_hex_debug(&ret, sizeof(ret));
         print_error("Invalid signature received");
@@ -571,7 +575,6 @@ static int handle_receive(receive_request_t *recv_req) {
     }
 
     print_debug("derived shared key");
-    print_hex_debug(&shared_key, shared_size);
     print_time();
 
     // Read file into response, encrypt response
@@ -647,6 +650,7 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     // Receive a packet from a neighboring hsm
     memset(uart_buf, 0, sizeof(uart_buf));
     read_packet(TRANSFER_INTERFACE, &cmd, uart_buf, &read_length);
+    reset_timer();
 
     switch (cmd) {
         case INTERROGATE_MSG:

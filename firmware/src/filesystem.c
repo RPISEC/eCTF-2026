@@ -17,8 +17,6 @@
 #include "simple_crypto.h"
 #include "simple_flash.h"
 #include "simple_trng.h"
-#include "wallet.h"
-#include <wolfssl/wolfcrypt/ed25519.h>
 
 int load_fat() {
     flash_simple_read((uint32_t)_FLASH_FAT_START, FILE_ALLOCATION_TABLE, sizeof(FILE_ALLOCATION_TABLE));
@@ -118,8 +116,10 @@ int encrypt_file(file_t *file, const uint8_t *k_storage) {
  * @return 0 upon success. A negative value otherwise.
 */
 int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
-    return sign_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature),
-                    file->signature, w_priv, w_pub);
+    return sign_msg((uint8_t *)file,
+                    sizeof(*file) - sizeof(file->signature) -
+                        sizeof(file->sig_len),
+                    file->signature, &file->sig_len, w_priv, w_pub);
 }
 
 /** @brief Create a new file object on flash
@@ -189,7 +189,8 @@ int read_file(slot_t slot, file_t *dest) {
  * @return 0 upon success. A negative value otherwise.
 */
 int verify_file(file_t *file, const uint8_t *w_pub) {
-    return verify_msg((uint8_t *)file, sizeof(*file) - 64, file->signature, w_pub);
+    return verify_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature) - sizeof(file->sig_len),
+                      file->signature, file->sig_len, w_pub);
 }
 
 /** @brief Decrypt a file's contents in memory

@@ -102,7 +102,8 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     file_headers_t headers;
     uint8_t contents[MAX_CONTENTS_SIZE]; // encrypted
-    uint8_t signature[64];
+    uint8_t signature[72];
+    uint32_t sig_len; // must be aligned!
 } file_t;
 
 /** @brief Initialize the filesystem

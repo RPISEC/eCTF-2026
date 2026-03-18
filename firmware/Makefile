@@ -55,9 +55,10 @@ OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
 OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
 OBJECTS += $(WOLFSSL_INC)/ed25519.o $(WOLFSSL_INC)/sha512.o
 OBJECTS += $(WOLFSSL_INC)/ge_operations.o $(WOLFSSL_INC)/fe_operations.o
-# OBJECTS += $(WOLFSSL_INC)/ge_low_mem.o $(WOLFSSL_INC)/fe_low_mem.o
-OBJECTS += $(WOLFSSL_INC)/curve25519.o
-OBJECTS += $(WOLFSSL_INC)/random.o
+OBJECTS += $(WOLFSSL_INC)/curve25519.o $(WOLFSSL_INC)/rsa.o
+OBJECTS += $(WOLFSSL_INC)/random.o $(WOLFSSL_INC)/asn.o
+OBJECTS += $(WOLFSSL_INC)/sp_int.o $(WOLFSSL_INC)/sp_armthumb.o
+OBJECTS += $(WOLFSSL_INC)/ecc.o $(WOLFSSL_INC)/signature.o
 
 # we also need random.o for TRNG testing
 ifeq ($(TRNG_TEST), 1)
@@ -71,7 +72,7 @@ CFLAGS += -I.. \
     -O2 \
     -I$(MSPM0_SDK_INSTALL_DIR)/source/third_party/CMSIS/Core/Include \
     -I$(MSPM0_SDK_INSTALL_DIR)/source \
-	-I./inc \
+    -I./inc \
     -gdwarf-3 \
     -mcpu=cortex-m0plus \
     -march=thumbv6m \
