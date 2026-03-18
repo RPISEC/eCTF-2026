@@ -97,7 +97,7 @@ int encrypt_file(file_t *file, const uint8_t *k_storage) {
     }
 
     // Encrypt
-    int ret = encrypt_sym(file->contents, file->headers.contents_len, k_storage,
+    int ret = encrypt_sym(file->contents, sizeof(file->contents), k_storage,
                           file->headers.iv, file->headers.auth_tag, NULL, 0,
                           file->contents); // Encrypt in place
     if (ret < 0) {
@@ -201,7 +201,7 @@ int verify_file(file_t *file, const uint8_t *w_pub) {
  * @return 0 upon success. A negative value otherwise.
 */
 int decrypt_file(file_t *file, const uint8_t *k_storage) {
-    int ret = decrypt_sym(file->contents, file->headers.contents_len, k_storage,
+    int ret = decrypt_sym(file->contents, sizeof(file->contents), k_storage,
                           file->headers.iv, file->headers.auth_tag, NULL, 0,
                           file->contents); // Decrypt in place
     return ret;
