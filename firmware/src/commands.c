@@ -197,6 +197,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     ret = get_w_priv(&w_priv, command->group_id);
     if (ret < 0) {
         print_error("Invalid permission");
+        return -1;
     }
 
     ret = get_w_pub(&w_pub, command->group_id);
@@ -204,6 +205,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     ret = get_k_storage(&k_storage, command->group_id);
     if (ret < 0) {
         print_error("Invalid permission");
+        return -1;
     }
 
     wallet_lock();
