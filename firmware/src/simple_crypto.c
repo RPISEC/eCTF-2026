@@ -136,7 +136,7 @@ int sign_msg(const uint8_t *in, int in_size, uint8_t *sig, uint32_t *sig_len,
         return -1;
     }
 
-    ret = wc_ecc_import_private_key(priv, 32, pub, 33, key);
+    ret = wc_ecc_import_private_key_ex(priv, 32, pub, 33, key, ECC_SECP256R1);
     if (ret < 0) {
         wc_ecc_key_free(key);
         return -2;
@@ -181,7 +181,7 @@ int verify_msg(const uint8_t *data, int data_size, const uint8_t *sig, uint32_t 
         return -1;
     }
 
-    ret = wc_ecc_import_x963(pub, 33, key);
+    ret = wc_ecc_import_x963_ex(pub, 33, key, ECC_SECP256R1);
     if (ret < 0) {
         wc_ecc_key_free(key);
         return -2;

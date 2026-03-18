@@ -40,7 +40,7 @@ uint64_t get_timer_ms(void) {
     uint64_t total_ticks = (uint64_t)overflows * (TIMER_0_INST_LOAD_VALUE + 1);
     total_ticks += (TIMER_0_INST_LOAD_VALUE - current_count);
 
-    return total_ticks / (TIMER_CLOCK_FREQ / 1000.0f);
+    return total_ticks / (TIMER_CLOCK_FREQ / 1000.0);
 }
 
 void print_time(void) {

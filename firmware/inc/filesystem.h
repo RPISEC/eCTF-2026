@@ -141,8 +141,8 @@ int encrypt_file(file_t *file, const uint8_t *k_storage);
 /** @brief Sign a file in memory
  *
  *  @param file The file to sign
- *  @param w_priv The ED25519 256-bit private key
- *  @param w_pub The ED25519 256-bit public key
+ *  @param w_priv The P256 256-bit private key
+ *  @param w_pub The P256 257-bit public key
  *
  * @return 0 upon success. A negative value otherwise.
 */
@@ -170,7 +170,7 @@ int read_file(slot_t slot, file_t *dest);
 /** @brief Verify a file's signature in memory
  *
  *  @param file The file to verify.
- *  @param w_pub The ED25519 256-bit public key.
+ *  @param w_pub The P256 257-bit public key.
  *
  * @return 0 upon success. A negative value otherwise.
 */

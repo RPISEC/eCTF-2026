@@ -21,11 +21,8 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 
 // crypto algorithms
 #define HAVE_AESGCM
-// #define HAVE_ED25519
 #define HAVE_ECC
 #define HAVE_COMP_KEY
-#define WOLFSSL_SHA512
-#define HAVE_CURVE25519
 #define NO_RSA
 
 // timing resistance settings
@@ -48,5 +45,6 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 #define WOLFSSL_SP_ARM_THUMB_ASM
 #define WOLFSSL_HAVE_SP_ECC
 #define USE_FAST_MATH
+#define GCM_TABLE_4BIT
 
 #endif // __USER_SETTINGS_H__

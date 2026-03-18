@@ -14,10 +14,10 @@
 #ifndef __COMMANDS_H__
 #define __COMMANDS_H__
 
-#include "hardware_crypto.h"
-#include "stdint.h"
 #include "filesystem.h"
+#include "hardware_crypto.h"
 #include "wallet.h"
+#include <stdint.h>
 
 #define pkt_len_t uint16_t
 
@@ -76,13 +76,14 @@ typedef struct {
     slot_t slot;
 } receive_request_t;
 
-typedef struct __attribute__((packed)) {
+typedef struct {
     slot_t slot;
-    uint8_t __padding; // alignment is off otherwise
+    uint8_t __padding1; // alignment is off otherwise
     group_id_t group_id;
     uint32_t nonce;
-    key32_t b_pub;
-    key32_t a_pub;
+    key33_t b_pub;
+    key33_t a_pub;
+    uint16_t __padding2; // alignment is off otherwise
     uint8_t signature[72];
     uint32_t sig_len;
 } receive_challenge_t;
@@ -113,6 +114,12 @@ typedef struct {
 } read_response_t;
 
 #pragma pack(pop) // Tells the compiler to resume padding struct members
+
+/** @brief Generate next P256 key for handshake
+ *
+ * @return 0 upon success. A negative value on error.
+ */
+int generate_key_cx(void);
 
 /** @brief Perform the list operation
  *
