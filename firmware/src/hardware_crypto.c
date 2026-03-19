@@ -22,6 +22,7 @@
 */
 
 // config for hardware interface
+#include <stdint.h>
 #include <ti/devices/msp/msp.h>
 #include <ti/driverlib/driverlib.h>
 #include <ti/driverlib/m0p/dl_core.h>
@@ -171,14 +172,10 @@ int callbackHardwareCrypto(int devId, wc_CryptoInfo* info, void* ctx) {
         return BAD_FUNC_ARG;
     }
 
-    // Reconstruct raw key bytes from wolfcrypt's key schedule
     // wolfcrypt stores key words as big-endian uint32_t on little-endian ARM
-    uint8_t raw_key[32];
+    // swapping endianness of key words is necessary
     for (int i = 0; i < 8; i++) {
-        raw_key[i*4+0] = (aes->key[i] >> 24) & 0xFF;
-        raw_key[i*4+1] = (aes->key[i] >> 16) & 0xFF;
-        raw_key[i*4+2] = (aes->key[i] >>  8) & 0xFF;
-        raw_key[i*4+3] = (aes->key[i]      ) & 0xFF;
+        aes->key[i] = __REV(aes->key[i]);
     }
 
     if (!DL_AESADV_isUserKeyWriteEnabled(AESADV)) {
@@ -187,7 +184,7 @@ int callbackHardwareCrypto(int devId, wc_CryptoInfo* info, void* ctx) {
 
     // load key into AES engine
     DL_AESADV_setKeySize(AESADV, DL_AESADV_KEY_SIZE_256_BIT);
-    DL_AESADV_setKeyAligned(AESADV, (uint32_t*)raw_key, DL_AESADV_KEY_SIZE_256_BIT);
+    DL_AESADV_setKeyAligned(AESADV, aes->key, DL_AESADV_KEY_SIZE_256_BIT);
 
     NVIC_EnableIRQ(AESADV_INT_IRQn);
 
