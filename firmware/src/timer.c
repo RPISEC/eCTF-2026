@@ -43,11 +43,15 @@ uint64_t get_timer_ms(void) {
     return total_ticks / (TIMER_CLOCK_FREQ / 1000.0);
 }
 
+#ifdef DEBUG
 void print_time(void) {
     char s[16];
     snprintf(s, 16, "%llu ms", get_timer_ms());
     print_debug(s);
 }
+#else
+void print_time(void) {}
+#endif
 
 void TIMER_0_INST_IRQHandler(void) {
     if (DL_Timer_getPendingInterrupt(TIMER_0_INST) == DL_TIMERG_IIDX_ZERO) {

@@ -93,8 +93,13 @@ int read_packet(int uart_id, msg_type_t* cmd, void *buf, uint16_t *len);
 #define print_error(msg) write_packet(CONTROL_INTERFACE, ERROR_MSG, msg, strlen(msg))
 
 // Macro definitions to print the specified format for debug messages
+#ifdef DEBUG
 #define print_debug(msg) write_packet(CONTROL_INTERFACE, DEBUG_MSG, msg, strlen(msg))
 #define print_hex_debug(msg, len) write_hex(CONTROL_INTERFACE, DEBUG_MSG, msg, len)
+#else
+#define print_debug(msg) {}
+#define print_hex_debug(msg, len) {}
+#endif // DEBUG
 
 // Macro definitions to write ack message
 #define write_ack(uart_id) write_packet(uart_id, ACK_MSG, NULL, 0)

@@ -328,6 +328,8 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     b_pub = wc_ecc_key_new(NULL);
     if (b_pub == NULL) {
         print_error("out of memory for keys");
+
+        wallet_lock();
         return -12;
     }
 
@@ -338,12 +340,14 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         print_error("Opcode mismatch");
 
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -3;
     }
     if (chal_ctx.slot != request.slot) {
         print_error("Slot changed unexpectedly");
 
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -4;
     }
 
@@ -354,6 +358,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         print_error("Exchange key not valid");
 
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -20;
     }
     uint32_t keysize = 33;
@@ -368,6 +373,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         print_error("Could not get receive key. Missing group perms?");
 
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -5;
     }
 
@@ -388,6 +394,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         print_error("Failed to import public key");
 
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -6;
     }
 
@@ -400,6 +407,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         print_error("Shared key failed");
 
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -13;
     }
 
@@ -421,6 +429,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         print_error("Insufficient space to store recv_resp");
 
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -7;
     }
 
@@ -429,10 +438,11 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     len_recv_msg = sizeof(*recv_resp);
     read_packet(TRANSFER_INTERFACE, &cmd, recv_resp, &len_recv_msg);
     if (cmd != RECEIVE_MSG) {
-        free(recv_resp);
         print_error("Opcode mismatch");
 
+        free(recv_resp);
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -8;
     }
 
@@ -443,10 +453,11 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
                 shared_key, recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                 recv_resp->uuid);
     if (ret < 0) {
-        free(recv_resp);
         print_error("Failed to decrypt received data");
 
+        free(recv_resp);
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -9;
     }
 
@@ -457,10 +468,11 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     ret = get_w_pub(&w_pub, chal_ctx.group_id);
     ret = verify_file(&recv_resp->file, w_pub);
     if (ret < 0) {
-        free(recv_resp);
         print_error("Failed to verify file signature");
 
+        free(recv_resp);
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -10;
     }
 
@@ -469,10 +481,11 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     // write that file into the file system
     if (write_file(command->write_slot, &recv_resp->file, recv_resp->uuid) < 0) {
-        free(recv_resp);
         print_error("Writing received file failed");
 
+        free(recv_resp);
         wc_ecc_key_free(b_pub);
+        wallet_lock();
         return -11;
     }
 
@@ -484,6 +497,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     free(recv_resp);
     wc_ecc_key_free(b_pub);
+    wallet_lock();
     return 0;
 }
 
