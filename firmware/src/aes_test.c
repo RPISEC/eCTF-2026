@@ -51,7 +51,7 @@ static const uint8_t TEST_AAD[] = "header-aad-data";
 #define TEST_AAD_SZ ((uint32_t)sizeof(TEST_AAD) - 1)   /* exclude NUL */
 
 /* Plaintext to encrypt */
-static const uint8_t TEST_PLAINTEXT[] = "Hello from hardware AES-GCM!";
+static const uint8_t TEST_PLAINTEXT[] = "Hello from hardware AES-GCM";
 #define TEST_PT_SZ ((uint32_t)sizeof(TEST_PLAINTEXT) - 1)
 
 #define AUTH_TAG_SZ 16u
@@ -101,18 +101,34 @@ int test_aes_gcm(void)
     Aes     aes;
     int     ret;
 
-    uint8_t ciphertext[TEST_PT_SZ];
-    uint8_t decrypted[TEST_PT_SZ];
-    uint8_t auth_tag[AUTH_TAG_SZ];
+    // copy inputs to malloced buffers (4-byte aligned for hardware engine)
+    uint8_t *test_plaintext = (uint8_t *)malloc(TEST_PT_SZ);
+    uint8_t *test_aad = (uint8_t *)malloc(TEST_AAD_SZ);
+    uint8_t *ciphertext = (uint8_t *)malloc(TEST_PT_SZ);
+    uint8_t *decrypted = (uint8_t *)malloc(TEST_PT_SZ);
+    uint8_t *auth_tag = (uint8_t *)malloc(AUTH_TAG_SZ);
+    uint8_t *ciphertext_software = (uint8_t *)malloc(TEST_PT_SZ);
+    uint8_t *decrypted_software = (uint8_t *)malloc(TEST_PT_SZ);
+    uint8_t *auth_tag_software = (uint8_t *)malloc(AUTH_TAG_SZ);
 
-    memset(ciphertext, 0, sizeof(ciphertext));
-    memset(decrypted,  0, sizeof(decrypted));
-    memset(auth_tag,   0, sizeof(auth_tag));
+    if (!ciphertext || !decrypted || !auth_tag || !ciphertext_software || !decrypted_software || !auth_tag_software) {
+        print_debug("[test_aes_gcm] failed to allocate memory\n");
+        return -1;
+    }
+
+    memcpy(test_plaintext, TEST_PLAINTEXT, TEST_PT_SZ);
+    memcpy(test_aad, TEST_AAD, TEST_AAD_SZ);
+    memcpy(ciphertext, ciphertext, TEST_PT_SZ);
+    memcpy(decrypted, decrypted, TEST_PT_SZ);
+    memcpy(auth_tag, auth_tag, AUTH_TAG_SZ);
+    memcpy(ciphertext_software, ciphertext_software, TEST_PT_SZ);
+    memcpy(decrypted_software, decrypted_software, TEST_PT_SZ);
+    memcpy(auth_tag_software, auth_tag_software, AUTH_TAG_SZ);
 
     print_debug("[test_aes_gcm] starting encrypt/decrypt round-trip\n");
 
     /* ----------------------------------------------------------------
-     * Encrypt
+     * Encrypt with hardware crypto callback
      * --------------------------------------------------------------- */
     ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
     if (ret != 0) {
@@ -130,10 +146,10 @@ int test_aes_gcm(void)
     ret = wc_AesGcmEncrypt(
         &aes,
         ciphertext,                     /* out          */
-        TEST_PLAINTEXT, TEST_PT_SZ,     /* in, sz       */
+        test_plaintext, TEST_PT_SZ,     /* in, sz       */
         TEST_IV,        sizeof(TEST_IV),/* iv, ivSz     */
         auth_tag,       AUTH_TAG_SZ,    /* tag, tagSz   */
-        TEST_AAD,       TEST_AAD_SZ     /* aad, aadSz   */
+        test_aad,       TEST_AAD_SZ     /* aad, aadSz   */
     );
 
     wc_AesFree(&aes);
@@ -143,17 +159,49 @@ int test_aes_gcm(void)
         return ret;
     }
 
+    /*
+    * Encrypt with software implementation (for comparison)
+    */
+    ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+    ret = wc_AesGcmSetKey(&aes, TEST_KEY, sizeof(TEST_KEY));
+    ret = wc_AesGcmEncrypt(
+        &aes,
+        ciphertext_software,
+        test_plaintext, TEST_PT_SZ,
+        TEST_IV,        sizeof(TEST_IV),
+        auth_tag_software, AUTH_TAG_SZ,
+        test_aad,       TEST_AAD_SZ
+    );
+    wc_AesFree(&aes);
+
     print_debug("[test_aes_gcm] plaintext  : ");
-    print_hex("", TEST_PLAINTEXT, TEST_PT_SZ);
+    print_hex("", test_plaintext, TEST_PT_SZ);
 
-    print_debug("[test_aes_gcm] ciphertext : ");
+    print_debug("[test_aes_gcm] hw ciphertext : ");
     print_hex("", ciphertext, TEST_PT_SZ);
+    print_debug("[test_aes_gcm] sw ciphertext : ");
+    print_hex("", ciphertext_software, TEST_PT_SZ);
 
-    print_debug("[test_aes_gcm] auth tag   : ");
+    print_debug("[test_aes_gcm] hw auth tag   : ");
     print_hex("", auth_tag, AUTH_TAG_SZ);
+    print_debug("[test_aes_gcm] sw auth tag   : ");
+    print_hex("", auth_tag_software, AUTH_TAG_SZ);
+
+    /*
+    Check that hardware and software ciphertexts and tags match (they should, since the same key, IV, AAD, and plaintext are used).
+    */
+    if (safe_memcmp(ciphertext, ciphertext_software, TEST_PT_SZ) != 0) {
+        print_debug("[test_aes_gcm] FAIL: hardware and software ciphertexts do not match\n");
+        return -1;
+    }
+    if (safe_memcmp(auth_tag, auth_tag_software, AUTH_TAG_SZ) != 0) {
+        print_debug("[test_aes_gcm] FAIL: hardware and software auth tags do not match\n");
+        return -1;
+    }
+    print_debug("[test_aes_gcm] PASS: hardware and software ciphertexts and tags match\n");
 
     /* ----------------------------------------------------------------
-     * Decrypt
+     * Decrypt with hardware crypto callback, verify auth tag
      * --------------------------------------------------------------- */
     ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
     if (ret != 0) {
@@ -186,14 +234,39 @@ int test_aes_gcm(void)
         return ret;
     }
 
-    print_debug("[test_aes_gcm] decrypted  : ");
+    /*
+    * Also decrypt with software implementation (for comparison)
+    */
+    ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+    ret = wc_AesGcmSetKey(&aes, TEST_KEY, sizeof(TEST_KEY));
+    ret = wc_AesGcmDecrypt(
+        &aes,
+        decrypted_software,
+        ciphertext_software, TEST_PT_SZ,
+        TEST_IV,            sizeof(TEST_IV),
+        auth_tag_software,  AUTH_TAG_SZ,
+        test_aad,           TEST_AAD_SZ
+    );
+    wc_AesFree(&aes);
+
+    print_debug("[test_aes_gcm] hw decrypted  : ");
     print_hex("", decrypted, TEST_PT_SZ);
+    print_debug("[test_aes_gcm] sw decrypted  : ");
+    print_hex("", decrypted_software, TEST_PT_SZ);
 
     /* ----------------------------------------------------------------
      * Verify round-trip
      * --------------------------------------------------------------- */
-    if (safe_memcmp(decrypted, TEST_PLAINTEXT, TEST_PT_SZ) != 0) {
+    if (safe_memcmp(decrypted, test_plaintext, TEST_PT_SZ) != 0) {
         print_debug("[test_aes_gcm] FAIL: decrypted output does not match plaintext\n");
+        return -1;
+    }
+
+    /*
+    Compare hardware and software decrypted outputs as well (they should match).
+    */
+    if (safe_memcmp(decrypted, decrypted_software, TEST_PT_SZ) != 0) {
+        print_debug("[test_aes_gcm] FAIL: hardware and software decrypted outputs do not match\n");
         return -1;
     }
 
@@ -223,9 +296,13 @@ int test_aes_gcm_errors(void)
      * --------------------------------------------------------------- */
     uint8_t ciphertext[TEST_PT_SZ];
     uint8_t auth_tag[AUTH_TAG_SZ];
+    uint8_t test_plaintext[TEST_PT_SZ];
+    uint8_t test_aad[TEST_AAD_SZ];
 
     memset(ciphertext, 0, sizeof(ciphertext));
     memset(auth_tag,   0, sizeof(auth_tag));
+    memset(test_plaintext, 0, sizeof(test_plaintext));
+    memset(test_aad, 0, sizeof(test_aad));
 
     print_debug("[test_aes_gcm_errors] generating valid ciphertext...\n");
 
@@ -238,10 +315,10 @@ int test_aes_gcm_errors(void)
     ret = wc_AesGcmEncrypt(
         &aes,
         ciphertext,
-        TEST_PLAINTEXT, TEST_PT_SZ,
+        test_plaintext, TEST_PT_SZ,
         TEST_IV,        sizeof(TEST_IV),
         auth_tag,       AUTH_TAG_SZ,
-        TEST_AAD,       TEST_AAD_SZ
+        test_aad,       TEST_AAD_SZ
     );
     wc_AesFree(&aes);
 
@@ -251,6 +328,32 @@ int test_aes_gcm_errors(void)
     }
 
     uint8_t decrypted[TEST_PT_SZ];
+
+    /*
+    * Test 0: Test that an input that is not 4-byte aligned is rejected
+    */
+    print_debug("[test_aes_gcm_errors] test 0: unaligned input... ");
+    ret = wc_AesInit(&aes, NULL, HARDWARE_CRYPTO_DEVICE_ID);
+    if (ret != 0) { print_debug("wc_AesInit failed\n"); return -1; }
+    ret = wc_AesGcmSetKey(&aes, TEST_KEY, sizeof(TEST_KEY));
+    if (ret != 0) { wc_AesFree(&aes); print_debug("wc_AesGcmSetKey failed\n"); return -1; }
+    ret = wc_AesGcmEncrypt(
+        &aes,
+        test_plaintext + 1,                  /* out (deliberately unaligned) */
+         ciphertext, TEST_PT_SZ,        /* in, sz       */
+         TEST_IV,    sizeof(TEST_IV),   /* iv, ivSz     */
+         auth_tag,   AUTH_TAG_SZ,       /* tag, tagSz   */
+         test_aad,   TEST_AAD_SZ        /* aad, aadSz   */
+    );
+    if (ret != BAD_FUNC_ARG) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "FAIL (expected BAD_FUNC_ARG, got %d)\n", ret);
+        print_debug(buf);
+        pass = 0;
+    } else {
+        print_debug("PASS (correctly rejected)\n");
+    }
+    wc_AesFree(&aes);
 
     /* ----------------------------------------------------------------
      * Test 1: Tampered ciphertext (flip one bit in the middle)
@@ -274,7 +377,7 @@ int test_aes_gcm_errors(void)
         bad_ciphertext, TEST_PT_SZ,
         TEST_IV,        sizeof(TEST_IV),
         auth_tag,       AUTH_TAG_SZ,
-        TEST_AAD,       TEST_AAD_SZ
+        test_aad,       TEST_AAD_SZ
     );
     wc_AesFree(&aes);
 
@@ -309,7 +412,7 @@ int test_aes_gcm_errors(void)
         ciphertext,  TEST_PT_SZ,
         TEST_IV,     sizeof(TEST_IV),
         bad_tag,     AUTH_TAG_SZ,
-        TEST_AAD,    TEST_AAD_SZ
+        test_aad,    TEST_AAD_SZ
     );
     wc_AesFree(&aes);
 
@@ -373,7 +476,7 @@ int test_aes_gcm_errors(void)
         ciphertext,  TEST_PT_SZ,
         TEST_IV,     sizeof(TEST_IV),
         auth_tag,    AUTH_TAG_SZ,
-        TEST_AAD,    TEST_AAD_SZ - 1    /* one byte shorter */
+        test_aad,    TEST_AAD_SZ - 1    /* one byte shorter */
     );
     wc_AesFree(&aes);
 
@@ -409,7 +512,7 @@ int test_aes_gcm_errors(void)
         ciphertext,  TEST_PT_SZ,
         WRONG_IV,    sizeof(WRONG_IV),  /* wrong IV */
         auth_tag,    AUTH_TAG_SZ,
-        TEST_AAD,    TEST_AAD_SZ
+        test_aad,    TEST_AAD_SZ
     );
     wc_AesFree(&aes);
 
