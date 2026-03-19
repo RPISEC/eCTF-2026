@@ -66,6 +66,7 @@ void generate_list_files(list_response_t *file_list) {
 int list(uint16_t pkt_len, uint8_t *buf) {
     list_command_t *command = (list_command_t*)buf;
     static list_response_t file_list;
+    int ret;
 
     JITTER;
     memset(&file_list, 0, sizeof(file_list));
@@ -74,10 +75,12 @@ int list(uint16_t pkt_len, uint8_t *buf) {
     generate_list_files(&file_list);
 
     JITTER;
-    if (!check_pin(command->pin)) {
+    ret = check_pin(command->pin);
+    IF (!ret) {
         print_error("Invalid pin");
         return -1;
     }
+    ENDIF
 
     // write success packet with list
     pkt_len_t length = LIST_PKT_LEN(file_list.n_files);
@@ -325,9 +328,12 @@ int interrogate(uint16_t pkt_len, uint8_t *buf) {
     msg_type_t cmd;
     list_response_t final_list_buf;
     uint16_t len_recv_msg;
+    int ret;
 
     // pin check
-    if (!check_pin(command->pin)) {
+    JITTER;
+    ret = check_pin(command->pin);
+    IF (!ret) {
         print_error("Invalid pin");
         return -1;
     }
