@@ -16,7 +16,7 @@ AES_TEST = 0
 TRNG_TEST = 0
 
 # Print debug information
-DEBUG = 0
+DEBUG = 1
 
 OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_uart.so \
@@ -59,7 +59,7 @@ OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/cryptocb.o
 OBJECTS += $(WOLFSSL_INC)/wc_port.o $(WOLFSSL_INC)/pwdbased.o
 OBJECTS += $(WOLFSSL_INC)/memory.o $(WOLFSSL_INC)/hash.o
 OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
-OBJECTS += $(WOLFSSL_INC)/sha256.o
+OBJECTS += $(WOLFSSL_INC)/sha256.o $(WOLFSSL_INC)/wolfmath.o
 OBJECTS += $(WOLFSSL_INC)/random.o $(WOLFSSL_INC)/asn.o
 OBJECTS += $(WOLFSSL_INC)/sp_int.o $(WOLFSSL_INC)/sp_armthumb.o
 OBJECTS += $(WOLFSSL_INC)/ecc.o $(WOLFSSL_INC)/signature.o

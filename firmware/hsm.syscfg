@@ -33,6 +33,7 @@ AESADV.mode    = "DL_AESADV_MODE_GCM_AUTONOMOUS";
 
 CAPTURE1.$name               = "CAPTURE_0";
 CAPTURE1.interrupts          = ["CC0_DN","CC0_UP","ZERO"];
+CAPTURE1.peripheral.$assign  = "TIMA0";
 CAPTURE1.ccp0PinConfig.$name = "ti_driverlib_gpio_GPIOPinGeneric4";
 
 GPIO1.$name                          = "LEDS";
@@ -50,16 +51,18 @@ GPIO2.associatedPins[0].pin.$assign      = "PB21";
 
 const SYSCTL = scripting.addModule("/ti/driverlib/SYSCTL", {}, false);
 
-TIMER1.$name   = "TIMER_0";
-TIMER1.profile = "Basic_Periodic";
+TIMER1.$name              = "TIMER_0";
+TIMER1.profile            = "Basic_Periodic";
+TIMER1.peripheral.$assign = "TIMG0";
 
 TRNG.decimationRate = "DL_TRNG_DECIMATION_RATE_8";
 
 UART1.$name                    = "UART_0";
 UART1.targetBaudRate           = 115200;
-UART1.rxFifoThreshold          = "DL_UART_RX_FIFO_LEVEL_ONE_ENTRY";
 UART1.enableDMARX              = false;
 UART1.enableDMATX              = false;
+UART1.enableFIFO               = true;
+UART1.rxFifoThreshold          = "DL_UART_RX_FIFO_LEVEL_FULL";
 UART1.peripheral.$assign       = "UART0";
 UART1.peripheral.rxPin.$assign = "PA11";
 UART1.peripheral.txPin.$assign = "PA10";
@@ -68,6 +71,8 @@ UART1.rxPinConfig.$name        = "ti_driverlib_gpio_GPIOPinGeneric1";
 
 UART2.$name                    = "UART_1";
 UART2.targetBaudRate           = 115200;
+UART2.enableFIFO               = true;
+UART2.rxFifoThreshold          = "DL_UART_RX_FIFO_LEVEL_FULL";
 UART2.peripheral.$assign       = "UART1";
 UART2.peripheral.rxPin.$assign = "PA9";
 UART2.peripheral.txPin.$assign = "PA8";
@@ -84,7 +89,5 @@ ProjectConfig.compiler = "ticlang";
 Board.peripheral.$suggestSolution            = "DEBUGSS";
 Board.peripheral.swclkPin.$suggestSolution   = "PA20";
 Board.peripheral.swdioPin.$suggestSolution   = "PA19";
-CAPTURE1.peripheral.$suggestSolution         = "TIMA0";
 CAPTURE1.peripheral.ccp0Pin.$suggestSolution = "PA0";
 SYSCTL.peripheral.$suggestSolution           = "SYSCTL";
-TIMER1.peripheral.$suggestSolution           = "TIMG0";

@@ -16,6 +16,7 @@
 #include "host_messaging.h"
 #include "simple_crypto.h"
 #include "simple_trng.h"
+#include "simple_uart.h"
 #include "timer.h"
 
 /* IMPORTANT COMPONENTS FROM HSM.c */
@@ -275,9 +276,18 @@ int generate_key_cx(void) {
     const int p256_size = wc_ecc_get_curve_size_from_id(ECC_SECP256R1);
     ret = wc_ecc_make_key_ex(rng, p256_size, &key_cx, ECC_SECP256R1);
     if (ret != 0) {
+        key_cx_valid = false;
         wc_ecc_free(&key_cx);
         wc_FreeRng(rng);
         return -3;
+    }
+
+    ret = wc_ecc_make_pub_ex(&key_cx, NULL, rng);
+    if (ret != 0) {
+        key_cx_valid = false;
+        wc_ecc_free(&key_cx);
+        wc_FreeRng(rng);
+        return -4;
     }
 
     key_cx_valid = true;
@@ -327,6 +337,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     b_pub = wc_ecc_key_new(NULL);
     if (b_pub == NULL) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
         print_error("out of memory for keys");
 
         wallet_lock();
@@ -337,14 +348,16 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     len_recv_msg = sizeof(chal_ctx);
     read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
     if (cmd != RECEIVE_MSG) {
-        print_error("Opcode mismatch");
+        print_error("Error on listening side.");
 
         wc_ecc_key_free(b_pub);
         wallet_lock();
         return -3;
     }
     if (chal_ctx.slot != request.slot) {
-        print_error("Slot changed unexpectedly");
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
+        print_error("Specified slot not valid");
 
         wc_ecc_key_free(b_pub);
         wallet_lock();
@@ -355,22 +368,60 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     print_time();
 
     if (!key_cx_valid) {
+        // Must regenerate key for next exchange even if this one fails.
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
         print_error("Exchange key not valid");
 
         wc_ecc_key_free(b_pub);
         wallet_lock();
-        return -20;
+        return -17;
     }
+
+    ///
+    uint8_t rawx[32];
+    uint32_t lenx = 32;
+    uint8_t rawy[32];
+    uint32_t leny = 32;
+
+    wc_ecc_export_public_raw(&key_cx, rawx, &lenx, rawy, &leny);
+    print_debug("Raw pub:");
+    print_hex_debug(rawx, 32);
+    print_hex_debug(rawy, 32);
+    ///
+
     uint32_t keysize = 33;
-    wc_ecc_export_x963_ex(&key_cx, chal_ctx.a_pub, &keysize, 1);
+    ret = wc_ecc_export_x963_ex(&key_cx, chal_ctx.a_pub, &keysize, 1);
     key_cx_valid = false;
+    if (ret < 0) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+        print_error("Failed to export key");
+
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        return -15;
+
+    }
 
     key32_t c_priv;
     key33_t c_pub;
     ret = get_c_pub(&c_pub, chal_ctx.group_id);
     ret = get_c_priv(&c_priv, chal_ctx.group_id);
     if (ret < 0) {
-        print_error("Could not get receive key. Missing group perms?");
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+        print_hex_debug(&chal_ctx, sizeof(chal_ctx));
+        print_error("Invalid permission");
 
         wc_ecc_key_free(b_pub);
         wallet_lock();
@@ -385,10 +436,27 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     print_debug("Signed challenge");
     print_time();
 
-    write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &chal_ctx, sizeof(chal_ctx));
+    ret = write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &chal_ctx, sizeof(chal_ctx));
+    if (ret != MSG_OK) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+        print_error("Error on listening side.");
+
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        return -14;
+    }
 
     ret = wc_ecc_import_x963_ex(chal_ctx.b_pub, 33, b_pub, ECC_SECP256R1);
     if (ret < 0) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_hex_debug(&ret, sizeof(ret));
         print_hex_debug(chal_ctx.b_pub, 33);
         print_error("Failed to import public key");
@@ -402,6 +470,13 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     uint32_t shared_size = 32;
     ret = wc_ecc_shared_secret(&key_cx, b_pub, shared_key, &shared_size);
     if (ret != 0 || shared_size != 32) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_hex_debug(&ret, sizeof(ret));
         print_hex_debug(&shared_size, sizeof(shared_size));
         print_error("Shared key failed");
@@ -411,21 +486,23 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -13;
     }
 
+    print_hex_debug(shared_key, 32);
     print_debug("Generated shared key");
     print_time();
 
     ret = generate_key_cx();
     if (ret < 0) {
-        print_debug("Failed to geenrate next exchange key");
-
+        print_debug("Failed to generate next exchange key");
     }
+
     print_debug("Generated new exchange key");
     print_time();
 
     // receive the response message
-    //
     recv_resp = malloc(sizeof(*recv_resp));
     if (recv_resp == NULL) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("Insufficient space to store recv_resp");
 
         wc_ecc_key_free(b_pub);
@@ -438,7 +515,9 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     len_recv_msg = sizeof(*recv_resp);
     read_packet(TRANSFER_INTERFACE, &cmd, recv_resp, &len_recv_msg);
     if (cmd != RECEIVE_MSG) {
-        print_error("Opcode mismatch");
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
+        print_error("Error on listening side.");
 
         free(recv_resp);
         wc_ecc_key_free(b_pub);
@@ -556,9 +635,7 @@ static int handle_receive(receive_request_t *recv_req) {
     // Verify slot
     ret = is_slot_in_use(recv_req->slot);
     if (!ret) {
-        // file does not exist or bad slot received
-        chal_ctx.slot = -1;
-        write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
 
         print_error("Bad slot requested");
         return -1;
@@ -572,8 +649,7 @@ static int handle_receive(receive_request_t *recv_req) {
     file_headers_t temp_file_headers;
     ret = get_file_headers(recv_req->slot, &temp_file_headers);
     if (ret < 0) {
-        chal_ctx.slot = -1;
-        write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
 
         print_error("Bad file");
         return -2;
@@ -586,10 +662,10 @@ static int handle_receive(receive_request_t *recv_req) {
     // Generate nonce
     uint32_t nonce = trng_get_u32();
     if (nonce == 0) {
-        chal_ctx.slot = -1;
-        write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, (void *)&chal_ctx, sizeof(chal_ctx));
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
 
         print_error("RNG failed");
+
         return -3;
     }
     chal_ctx.nonce = nonce;
@@ -597,35 +673,47 @@ static int handle_receive(receive_request_t *recv_req) {
     print_debug("set nonce");
     print_time();
 
-    // Generate key pair
+    // Get key pair
     if (!key_cx_valid) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("exchange key not ready");
+
         return -16;
     }
 
-    ecc_key *a_pub;
-
-    a_pub = wc_ecc_key_new(NULL);
-    if (a_pub == NULL) {
-        print_error("out of memory for keys");
-        return -15;
-    }
 
     uint32_t keysize = 33;
     ret = wc_ecc_export_x963_ex(&key_cx, chal_ctx.b_pub, &keysize, 1);
     key_cx_valid = false;
     if (ret < 0) {
+        // Must regenerate key for next exchange even if this one failed
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("failed to gen next exchange key");
+        }
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("failed to export exchange key");
 
-        wc_ecc_key_free(a_pub);
         return -16;
     }
 
+    print_hex_debug(&chal_ctx.b_pub, 33);
     print_debug("set key");
     print_time();
 
     // Respond to initial request
-    write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &chal_ctx, sizeof(chal_ctx));
+    ret = write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, &chal_ctx, sizeof(chal_ctx));
+    if (ret != MSG_OK) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("failed to gen next exchange key");
+        }
+        print_error("Error on receiving side.");
+
+        return -17;
+    }
 
     print_debug("sent challenge");
     print_time();
@@ -641,17 +729,17 @@ static int handle_receive(receive_request_t *recv_req) {
     len_recv_msg = sizeof(chal_ctx);
     read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
     if (cmd != RECEIVE_MSG) {
-        print_error("Opcode mismatch");
+        print_error("Error on receiving side.");
 
-        wc_ecc_key_free(a_pub);
         return -5;
     }
     if (chal_ctx.slot != recv_req->slot ||
         chal_ctx.group_id != temp_file_headers.group_id ||
         chal_ctx.nonce != nonce) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("Mismatch in received data.");
 
-        wc_ecc_key_free(a_pub);
         return -6;
     }
 
@@ -665,19 +753,32 @@ static int handle_receive(receive_request_t *recv_req) {
                      sizeof(chal_ctx) - sizeof(chal_ctx.signature) - sizeof(chal_ctx.sig_len),
                      chal_ctx.signature, chal_ctx.sig_len, c_pub);
     if (ret < 0) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_hex_debug(&ret, sizeof(ret));
         print_error("Invalid signature received");
 
-        wc_ecc_key_free(a_pub);
         return -7;
     }
 
     print_debug("verified signature");
     print_time();
 
+    ecc_key *a_pub;
+    a_pub = wc_ecc_key_new(NULL);
+    if (a_pub == NULL) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
+        print_error("out of memory for keys");
+
+        return -15;
+    }
+
     // Derive shared secret
     ret = wc_ecc_import_x963_ex(chal_ctx.a_pub, sizeof(chal_ctx.a_pub), a_pub, ECC_SECP256R1);
     if (ret < 0) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_hex_debug(&ret, sizeof(ret));
         print_error("Failed to import public key");
 
@@ -689,6 +790,8 @@ static int handle_receive(receive_request_t *recv_req) {
     uint32_t shared_size = 32;
     ret = wc_ecc_shared_secret(&key_cx_old, a_pub, shared_key, &shared_size);
     if (ret != 0 || shared_size != 32) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_hex_debug(&ret, sizeof(ret));
         print_hex_debug(&shared_size, sizeof(shared_size));
         print_error("Shared key failed");
@@ -703,6 +806,8 @@ static int handle_receive(receive_request_t *recv_req) {
     // Read file into response, encrypt response
     receive_response_t *recv_resp = malloc(sizeof(receive_response_t));
     if (recv_resp == NULL) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("Insufficient memory for receive response");
 
         wc_ecc_key_free(a_pub);
@@ -712,6 +817,8 @@ static int handle_receive(receive_request_t *recv_req) {
     for (int i = 0; i < AES_IV_SIZE / 4; i++) {
         uint32_t rand = trng_get_u32();
         if (rand == 0) {
+            write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
             print_error("TRNG failed");
 
             free(recv_resp);
@@ -723,6 +830,8 @@ static int handle_receive(receive_request_t *recv_req) {
 
     metadata = get_file_metadata(recv_req->slot);
     if (metadata == NULL) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("Getting metadata failed");
 
         free(recv_resp);
@@ -733,6 +842,8 @@ static int handle_receive(receive_request_t *recv_req) {
     memcpy(&recv_resp->uuid, &metadata->uuid, UUID_SIZE);
 
     if (read_file(recv_req->slot, &recv_resp->file) < 0) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("Failed to read file");
 
         free(recv_resp);
@@ -747,6 +858,8 @@ static int handle_receive(receive_request_t *recv_req) {
                       recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                       recv_resp->uuid);
     if (ret < 0) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
         print_error("Failed to encrypt response");
 
         free(recv_resp);
@@ -758,7 +871,10 @@ static int handle_receive(receive_request_t *recv_req) {
     print_time();
 
     // Send response
-    write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, recv_resp, sizeof(*recv_resp));
+    ret = write_packet(TRANSFER_INTERFACE, RECEIVE_MSG, recv_resp, sizeof(*recv_resp));
+    if (ret != MSG_OK) {
+        print_error("Error on receiving side.");
+    }
 
     print_debug("Sent file packet");
     print_time();
