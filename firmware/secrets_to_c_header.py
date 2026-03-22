@@ -25,12 +25,13 @@ PERM_W = 0x02
 PERM_C = 0x04
 
 KEY32_LEN = 32
+KEY33_LEN = 33
 PIN_SALT_LEN = 16
 KS_IV_LEN = 12
 KS_TAG_LEN = 16
 WALLET_ITERS = 10
 
-CLEAR_STORAGE_LEN = (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY32_LEN) + (MAX_NUM_GROUPS * KEY32_LEN)
+CLEAR_STORAGE_LEN = (MAX_NUM_GROUPS * 2) + MAX_NUM_GROUPS + (MAX_NUM_GROUPS * KEY33_LEN) + (MAX_NUM_GROUPS * KEY33_LEN)
 KEYSTORE_LEN = (MAX_NUM_GROUPS * KEY32_LEN) * 3
 KS_CT_LEN = KEYSTORE_LEN
 WALLET_FLASH_LEN = CLEAR_STORAGE_LEN + PIN_SALT_LEN + KS_IV_LEN + KS_CT_LEN + KS_TAG_LEN
@@ -93,16 +94,18 @@ def _decode_required(entry, field_name, group_key):
     if field_name not in entry:
         raise ValueError(f"Missing {field_name} for group {group_key}")
     value = bytes.fromhex(entry[field_name])
-    if len(value) != KEY32_LEN:
+    if ("priv" in field_name or "storage" in field_name) and len(value) != KEY32_LEN:
         raise ValueError(f"{field_name} must be {KEY32_LEN} bytes for group {group_key}")
+    if "pub" in field_name and len(value) != KEY33_LEN:
+        raise ValueError(f"{field_name} must be {KEY33_LEN} bytes for group {group_key}")
     return value
 
 
 def _build_clear_storage(permission_entries, groups_payload):
     group_ids = [0] * MAX_NUM_GROUPS
     perms = [0] * MAX_NUM_GROUPS
-    w_pub = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
-    c_pub = [bytes(KEY32_LEN) for _ in range(MAX_NUM_GROUPS)]
+    w_pub = [bytes(KEY33_LEN) for _ in range(MAX_NUM_GROUPS)]
+    c_pub = [bytes(KEY33_LEN) for _ in range(MAX_NUM_GROUPS)]
 
     for idx, entry in enumerate(permission_entries):
         group_key = entry["group_key"]

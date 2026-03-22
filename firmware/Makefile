@@ -15,6 +15,9 @@ AES_TEST = 0
 # Perform TRNG tests
 TRNG_TEST = 0
 
+# Print debug information
+DEBUG = 0
+
 OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_uart.so \
     $(BUILDDIR)/ti_msp_dl_config.so \
@@ -41,6 +44,10 @@ OBJECTS +=$(BUILDDIR)/trng_test.so
 CFLAGS += -DTRNG_TEST=1
 endif
 
+ifeq ($(DEBUG), 1)
+CFLAGS += -DDEBUG=1
+endif
+
 # specify wolfcrypt settings in user_settings.h
 CFLAGS += -DWOLFSSL_USER_SETTINGS
 
@@ -52,15 +59,10 @@ OBJECTS += $(WOLFSSL_INC)/aes.o $(WOLFSSL_INC)/cryptocb.o
 OBJECTS += $(WOLFSSL_INC)/wc_port.o $(WOLFSSL_INC)/pwdbased.o
 OBJECTS += $(WOLFSSL_INC)/memory.o $(WOLFSSL_INC)/hash.o
 OBJECTS += $(WOLFSSL_INC)/hmac.o $(WOLFSSL_INC)/sha.o
-OBJECTS += $(WOLFSSL_INC)/md5.o $(WOLFSSL_INC)/sha256.o
-OBJECTS += $(WOLFSSL_INC)/ed25519.o $(WOLFSSL_INC)/sha512.o
-OBJECTS += $(WOLFSSL_INC)/ge_operations.o $(WOLFSSL_INC)/fe_operations.o
-# OBJECTS += $(WOLFSSL_INC)/ge_low_mem.o $(WOLFSSL_INC)/fe_low_mem.o
-
-# we also need random.o for TRNG testing
-ifeq ($(TRNG_TEST), 1)
-OBJECTS += $(WOLFSSL_INC)/random.o
-endif
+OBJECTS += $(WOLFSSL_INC)/sha256.o $(WOLFSSL_INC)/wolfmath.o
+OBJECTS += $(WOLFSSL_INC)/random.o $(WOLFSSL_INC)/asn.o
+OBJECTS += $(WOLFSSL_INC)/sp_int.o $(WOLFSSL_INC)/sp_armthumb.o
+OBJECTS += $(WOLFSSL_INC)/ecc.o $(WOLFSSL_INC)/signature.o
 
 NAME = hsm
 
@@ -69,7 +71,7 @@ CFLAGS += -I.. \
     -O2 \
     -I$(MSPM0_SDK_INSTALL_DIR)/source/third_party/CMSIS/Core/Include \
     -I$(MSPM0_SDK_INSTALL_DIR)/source \
-	-I./inc \
+    -I./inc \
     -gdwarf-3 \
     -mcpu=cortex-m0plus \
     -march=thumbv6m \

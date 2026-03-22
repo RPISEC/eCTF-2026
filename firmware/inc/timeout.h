@@ -12,7 +12,7 @@
 #include <stdbool.h>
 
 #define TIMEOUT_PIN 4000
-#define TIMEOUT_BOOT 600
+#define TIMEOUT_BOOT 900
 
 void timeout(int time);
 

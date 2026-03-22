@@ -63,6 +63,7 @@ void init() {
 
     // Initialize all of the hardware components
     SYSCFG_DL_init();
+    reset_timer();
 
     // need to initialize wolfcrypt before initializing wolfcrypt-dependent components
     if (wolfCrypt_Init() < 0) {
@@ -82,6 +83,10 @@ void init() {
     }
 
     init_fs();
+
+    if (generate_key_cx() < 0) {
+        print_debug("failed to generate key for handshake");
+    }
 
     timeout(TIMEOUT_BOOT);
 }

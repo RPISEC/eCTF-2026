@@ -17,8 +17,6 @@
 #include "simple_crypto.h"
 #include "simple_flash.h"
 #include "simple_trng.h"
-#include "wallet.h"
-#include <wolfssl/wolfcrypt/ed25519.h>
 
 int load_fat() {
     flash_simple_read((uint32_t)_FLASH_FAT_START, FILE_ALLOCATION_TABLE, sizeof(FILE_ALLOCATION_TABLE));
@@ -46,6 +44,10 @@ int init_fs() {
  * @return True if the slot is in use. False otherwise.
 */
 bool is_slot_in_use(slot_t slot) {
+    if (slot < 0 || slot >= MAX_FILE_COUNT) {
+        return false;
+    }
+
     file_headers_t temp_file_headers;
     get_file_headers(slot, &temp_file_headers);
     return temp_file_headers.in_use == FILE_IN_USE;
@@ -95,7 +97,7 @@ int encrypt_file(file_t *file, const uint8_t *k_storage) {
     }
 
     // Encrypt
-    int ret = encrypt_sym(file->contents, file->headers.contents_len, k_storage,
+    int ret = encrypt_sym(file->contents, sizeof(file->contents), k_storage,
                           file->headers.iv, file->headers.auth_tag, NULL, 0,
                           file->contents); // Encrypt in place
     if (ret < 0) {
@@ -108,41 +110,16 @@ int encrypt_file(file_t *file, const uint8_t *k_storage) {
 /** @brief Sign a file in memory
  *
  *  @param file The file to sign
- *  @param w_priv The ED25519 256-bit private key
- *  @param w_pub The ED25519 256-bit public key
+ *  @param w_priv The P256 256-bit private key
+ *  @param w_pub The P256 257-bit public key
  *
  * @return 0 upon success. A negative value otherwise.
 */
 int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
-    ed25519_key *key;
-    uint32_t sign_len;
-    int ret;
-
-    key = malloc(sizeof(ed25519_key));
-    if (key == NULL) {
-        return -1;
-    }
-    ret = wc_ed25519_import_private_key(w_priv, sizeof(key32_t), w_pub,
-                                        sizeof(key32_t), key);
-    if (ret < 0) {
-        free(key);
-        return -2;
-    }
-
-    sign_len = sizeof(file->signature);
-    ret = wc_ed25519_sign_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature),
-                              file->signature, &sign_len, key);
-    if (sign_len != 64) {
-        return -3;
-    }
-
-    if (ret < 0) {
-        free(key);
-        return -4;
-    }
-
-    free(key);
-    return 0;
+    return sign_msg((uint8_t *)file,
+                    sizeof(*file) - sizeof(file->signature) -
+                        sizeof(file->sig_len),
+                    file->signature, &file->sig_len, w_priv, w_pub);
 }
 
 /** @brief Create a new file object on flash
@@ -156,6 +133,10 @@ int sign_file(file_t *file, const uint8_t *w_priv, const uint8_t *w_pub) {
 int write_file(slot_t slot, file_t *src, const uint8_t *uuid) {
     unsigned int length, flash_addr;
     int ret;
+
+    if (slot < 0 || slot >= MAX_FILE_COUNT) {
+        return -1;
+    }
 
     flash_addr = FILE_START_PAGE_FROM_SLOT(slot);
     length = FILE_TOTAL_SIZE(src->headers.contents_len);
@@ -185,10 +166,14 @@ int write_file(slot_t slot, file_t *src, const uint8_t *uuid) {
 int read_file(slot_t slot, file_t *dest) {
     int flash_addr, file_size;
 
+    if (slot < 0 || slot >= MAX_FILE_COUNT) {
+        return -1;
+    }
+
     flash_addr = FILE_ALLOCATION_TABLE[slot].flash_addr;
     file_size = FILE_ALLOCATION_TABLE[slot].length;
     if (flash_addr < 0 || file_size < 0) {
-        return -1;
+        return -2;
     }
 
     flash_simple_read(flash_addr, dest, sizeof(file_t));
@@ -199,35 +184,13 @@ int read_file(slot_t slot, file_t *dest) {
 /** @brief Verify a file's signature in memory
  *
  *  @param file The file to verify.
- *  @param w_pub The ED25519 256-bit public key.
+ *  @param w_pub The P256 257-bit public key.
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int verify_file(file_t *file, uint8_t *w_pub) {
-    ed25519_key *key;
-    int ret, success;
-
-    key = malloc(sizeof(ed25519_key));
-    if (key == NULL) {
-        return -1;
-    }
-
-    ret = wc_ed25519_import_public(w_pub, sizeof(key32_t), key);
-    if (ret < 0) {
-        free(key);
-        return -2;
-    }
-
-    ret = wc_ed25519_verify_msg(
-        file->signature, sizeof(file->signature), (uint8_t *)file,
-        sizeof(*file) - sizeof(file->signature), &success, key);
-    if (ret < 0 || !success) {
-        free(key);
-        return -3;
-    }
-
-    free(key);
-    return 0;
+int verify_file(file_t *file, const uint8_t *w_pub) {
+    return verify_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature) - sizeof(file->sig_len),
+                      file->signature, file->sig_len, w_pub);
 }
 
 /** @brief Decrypt a file's contents in memory
@@ -237,8 +200,8 @@ int verify_file(file_t *file, uint8_t *w_pub) {
  *
  * @return 0 upon success. A negative value otherwise.
 */
-int decrypt_file(file_t *file, uint8_t *k_storage) {
-    int ret = decrypt_sym(file->contents, file->headers.contents_len, k_storage,
+int decrypt_file(file_t *file, const uint8_t *k_storage) {
+    int ret = decrypt_sym(file->contents, sizeof(file->contents), k_storage,
                           file->headers.iv, file->headers.auth_tag, NULL, 0,
                           file->contents); // Decrypt in place
     return ret;
@@ -252,6 +215,10 @@ int decrypt_file(file_t *file, uint8_t *k_storage) {
  * @return A filesystem_entry_t * on success. NULL on error.
 */
 const filesystem_entry_t *get_file_metadata(slot_t slot) {
+    if (slot < 0 || slot >= MAX_FILE_COUNT) {
+        return NULL;
+    }
+
     return &FILE_ALLOCATION_TABLE[slot];
 }
 
@@ -262,10 +229,14 @@ const filesystem_entry_t *get_file_metadata(slot_t slot) {
 const int get_file_headers(slot_t slot, file_headers_t *file_headers) {
     int flash_addr, file_size;
 
+    if (slot < 0 || slot >= MAX_FILE_COUNT) {
+        return -1;
+    }
+
     flash_addr = FILE_ALLOCATION_TABLE[slot].flash_addr;
     file_size = FILE_ALLOCATION_TABLE[slot].length;
     if (flash_addr < 0 || file_size < 0) {
-        return -1;
+        return -2;
     }
     flash_simple_read(flash_addr, file_headers, sizeof(file_headers_t));
     return 0;

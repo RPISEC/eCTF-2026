@@ -21,9 +21,11 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 
 // crypto algorithms
 #define HAVE_AESGCM
-#define HAVE_ED25519
-#define WOLFSSL_SHA512
-// #define ED25519_SMALL
+#define HAVE_ECC
+#define HAVE_COMP_KEY
+#define HAVE_ECC_KEY_EXPORT
+#define NO_RSA
+#define NO_MD5
 
 // timing resistance settings
 #define TFM_TIMING_RESISTANT
@@ -38,5 +40,18 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 #define NO_WRITEV
 #define TIME_T_NOT_64BIT
 #define NO_FILESYSTEM
+
+// Faster math
+#define WOLFSSL_SP
+#define WOLFSSL_SP_MATH
+#define WOLFSSL_SP_ARM_THUMB_ASM
+#define WOLFSSL_HAVE_SP_ECC
+#define USE_FAST_MATH
+#define GCM_TABLE_4BIT
+
+// Custom #define to ensure _sp_mulmod is compiled (not included otherwise, maybe wolfcrypt bug?)
+#define SP_MULMOD
+
+#define HAVE_STRINGS_H
 
 #endif // __USER_SETTINGS_H__
