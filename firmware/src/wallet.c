@@ -6,15 +6,13 @@
 #include "macros.h"
 #include "simple_crypto.h"
 
-typedef uint8_t key32_t[32];
-
 // clear wallet
 typedef struct __attribute__((packed)) {
     uint16_t group_id[MAX_NUM_GROUPS];
     uint8_t perms[MAX_NUM_GROUPS];
 
-    key32_t w_pub[MAX_NUM_GROUPS];
-    key32_t c_pub[MAX_NUM_GROUPS];
+    key33_t w_pub[MAX_NUM_GROUPS];
+    key33_t c_pub[MAX_NUM_GROUPS];
 } clear_wallet_t;
 
 // private wallet
@@ -54,6 +52,10 @@ static int8_t get_group_index(uint16_t group_id) {
 /* Pin is encoded as 6 hex digit chars.
  * Returns 0 on success. */
 WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
+    if (!is_locked) {
+        return 0;
+    }
+
     static key32_t pin_key; // Safer in global memory
     int ret;
 
@@ -158,23 +160,23 @@ WARN_UNUSED_RESULT int get_w_priv(key32_t *key, uint16_t group_id) {
 }
 
 /* Returns 0 on success. */
-WARN_UNUSED_RESULT int get_w_pub(key32_t *key, uint16_t group_id) {
+WARN_UNUSED_RESULT int get_w_pub(key33_t *key, uint16_t group_id) {
     int index = get_group_index(group_id);
     if (index < 0 || index >= MAX_NUM_GROUPS)
         return -2;
 
-    memcpy(key, wallet->clear.w_pub[index], sizeof(key32_t));
+    memcpy(key, wallet->clear.w_pub[index], sizeof(key33_t));
 
     return 0;
 }
 
 /* Returns 0 on success. */
-WARN_UNUSED_RESULT int get_c_pub(key32_t *key, uint16_t group_id) {
+WARN_UNUSED_RESULT int get_c_pub(key33_t *key, uint16_t group_id) {
     int index = get_group_index(group_id);
     if (index < 0 || index >= MAX_NUM_GROUPS)
         return -2;
 
-    memcpy(key, wallet->clear.c_pub[index], sizeof(key32_t));
+    memcpy(key, wallet->clear.c_pub[index], sizeof(key33_t));
 
     return 0;
 }

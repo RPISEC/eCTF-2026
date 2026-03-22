@@ -11,14 +11,12 @@
  * @copyright Copyright (c) 2026 The MITRE Corporation
  */
 
-
 #include "simple_crypto.h"
-#include <stdint.h>
-#include <string.h>
 #include "hardware_crypto.h"
 #include "ti_msp_dl_config.h"
-
-
+#include <stdint.h>
+#include <string.h>
+#include <wolfssl/wolfcrypt/signature.h>
 
 /******************************** FUNCTION PROTOTYPES ********************************/
 /** @brief Encrypts plaintext using a symmetric cipher
@@ -38,7 +36,7 @@
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int encrypt_sym(const uint8_t *plaintext, size_t len, const uint8_t *key,
+int encrypt_sym(uint8_t *plaintext, size_t len, const uint8_t *key,
                 const uint8_t *iv, uint8_t *auth_tag, const uint8_t *aad,
                 size_t aad_len, uint8_t *ciphertext) {
     Aes *aes; // Context for encryption
@@ -86,8 +84,8 @@ int encrypt_sym(const uint8_t *plaintext, size_t len, const uint8_t *key,
  *
  * @return 0 on success, -1 on bad length, other non-zero for other error
  */
-int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *iv,
-                uint8_t *auth_tag, uint8_t *aad, size_t aad_len,
+int decrypt_sym(uint8_t *ciphertext, size_t len, const uint8_t *key, const uint8_t *iv,
+                const uint8_t *auth_tag, const uint8_t *aad, size_t aad_len,
                 uint8_t *plaintext) {
     Aes *aes; // Context for encryption
     int ret; // Library result
@@ -116,17 +114,87 @@ int decrypt_sym(uint8_t *ciphertext, size_t len, uint8_t *key, uint8_t *iv,
     return 0;
 }
 
-/** @brief Hashes arbitrary-length data
+/** @brief Signs arbitrary-length data
  *
- * @param data A pointer to a buffer of length len containing the data
- *          to be hashed
- * @param len The length of the plaintext to hash
- * @param hash_out A pointer to a buffer of length HASH_SIZE (16 bytes) where the resulting
- *          hash output will be written to
+ * @param in A pointer to a buffer of length in_size containing the data
+ *          to be signed
+ * @param in_size The size of the data to sign
+ * @param sig The 72-byte buffer to hold the signature
+ * @param priv The 32-byte P256 private signing key
+ * @param pub The 33-byte P256 public signing key
  *
  * @return 0 on success, non-zero for other error
  */
-int hash(void *data, size_t len, uint8_t *hash_out) {
-    // Pass values to hash
-    return wc_Md5Hash((uint8_t *)data, len, hash_out);
+int sign_msg(const uint8_t *in, int in_size, uint8_t *sig, uint32_t *sig_len,
+             const uint8_t *priv, const uint8_t *pub) {
+    WC_RNG *rng;
+    ecc_key *key;
+    int ret;
+
+    key = wc_ecc_key_new(NULL);
+    if (key == NULL) {
+        return -1;
+    }
+
+    ret = wc_ecc_import_private_key_ex(priv, 32, pub, 33, key, ECC_SECP256R1);
+    if (ret < 0) {
+        wc_ecc_key_free(key);
+        return -2;
+    }
+
+    rng = wc_rng_new(NULL, 0, NULL);
+    if (rng == NULL) {
+        wc_ecc_key_free(key);
+        return -3;
+    }
+
+    *sig_len = 72;
+    ret = wc_SignatureGenerate_ex(WC_HASH_TYPE_SHA256, WC_SIGNATURE_TYPE_ECC, in,
+                               in_size, sig, sig_len, key, sizeof(*key), rng, 0);
+
+    if (ret < 0) {
+        wc_ecc_key_free(key);
+        wc_rng_free(rng);
+        return -5;
+    }
+
+    wc_ecc_key_free(key);
+    wc_rng_free(rng);
+    return 0;
+}
+
+/** @brief Verifies a data signature
+ *
+ * @param data A pointer to a buffer of length in_size containing the signed data
+ * @param data_size The size of the data to sign
+ * @param sig The 72-byte signature
+ * @param pub The 33-byte P256 public signing key
+ *
+ * @return 0 on success, non-zero for other error
+ */
+int verify_msg(const uint8_t *data, int data_size, const uint8_t *sig, uint32_t sig_len, const uint8_t *pub) {
+    ecc_key *key;
+    int ret;
+
+    key = wc_ecc_key_new(NULL);
+    if (key == NULL) {
+        return -1;
+    }
+
+    ret = wc_ecc_import_x963_ex(pub, 33, key, ECC_SECP256R1);
+    if (ret < 0) {
+        wc_ecc_key_free(key);
+        return -2;
+    }
+
+    ret = wc_SignatureVerify(WC_HASH_TYPE_SHA256, WC_SIGNATURE_TYPE_ECC, data,
+                             data_size, sig, sig_len, key, sizeof(*key));
+
+    if (ret < 0) {
+        wc_ecc_key_free(key);
+        return -3;
+    }
+
+    wc_ecc_key_free(key);
+    return 0;
 }

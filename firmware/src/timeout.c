@@ -17,7 +17,6 @@
  * @param time Time to timeout, in millseconds
  */
 void timeout(int time) {
-    reset_timer();
     while (get_timer_ms() < time) {
         JITTER;
     }
