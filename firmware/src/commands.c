@@ -99,40 +99,46 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     int ret;
 
     if (wallet_unlock(command->pin)) {
+        wallet_lock();
         print_error("Invalid pin");
         return -1;
     }
 
     curr_file = malloc(sizeof(file_t));
     if (curr_file == NULL) {
+        wallet_lock();
         print_error("Insufficient memory for file");
         return -2;
     }
 
     ret = get_file_headers(command->slot, &curr_file->headers);
     if (ret < 0) {
-        print_error("Failed to get file headers");
+        wallet_lock();
         free(curr_file);
+        print_error("Failed to get file headers");
         return -8;
     }
 
     if (curr_file->headers.in_use != FILE_IN_USE) {
-        print_error("File slot not in use");
+        wallet_lock();
         free(curr_file);
+        print_error("File slot not in use");
         return -9;
     }
 
     if (!wallet_has_perms(curr_file->headers.group_id, PERM_R)) {
-        print_error("Invalid permission");
+        wallet_lock();
         free(curr_file);
+        print_error("Invalid permission");
         return -3;
     }
 
     ret = get_w_pub(&w_pub, curr_file->headers.group_id);
     ret = get_k_storage(&k_storage, curr_file->headers.group_id);
     if (ret < 0) {
-        print_error("Invalid key");
+        wallet_lock();
         free(curr_file);
+        print_error("Invalid key");
         return -4;
     }
 
@@ -190,6 +196,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     key33_t w_pub;
 
     if (wallet_unlock(command->pin)) {
+        wallet_lock();
         print_error("Invalid pin");
         return -1;
     }
@@ -197,6 +204,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     /* get functions already check permissions */
     ret = get_w_priv(&w_priv, command->group_id);
     if (ret < 0) {
+        wallet_lock();
         print_error("Invalid permission");
         return -1;
     }
@@ -205,6 +213,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
 
     ret = get_k_storage(&k_storage, command->group_id);
     if (ret < 0) {
+        wallet_lock();
         print_error("Invalid permission");
         return -1;
     }
@@ -314,6 +323,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     int ret;
 
     if (wallet_unlock(command->pin)) {
+        wallet_lock();
         print_error("Invalid pin");
         return -1;
     }
