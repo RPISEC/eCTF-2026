@@ -16,7 +16,7 @@ AES_TEST = 0
 TRNG_TEST = 0
 
 # Print debug information
-DEBUG = 1
+DEBUG = 0
 
 OBJECTS = $(BUILDDIR)/HSM.so \
     $(BUILDDIR)/simple_uart.so \
