@@ -13,6 +13,7 @@
 
 #include "commands.h"
 #include "filesystem.h"
+#include "macros.h"
 #include "host_messaging.h"
 #include "simple_crypto.h"
 #include "simple_trng.h"
@@ -66,16 +67,21 @@ void generate_list_files(list_response_t *file_list) {
 int list(uint16_t pkt_len, uint8_t *buf) {
     list_command_t *command = (list_command_t*)buf;
     static list_response_t file_list;
+    int ret;
 
+    JITTER;
     memset(&file_list, 0, sizeof(file_list));
 
     // copy relevant fields into the final struct
     generate_list_files(&file_list);
 
-    if (!check_pin(command->pin)) {
+    JITTER;
+    ret = check_pin(command->pin);
+    IF (!ret) {
         print_error("Invalid pin");
         return -1;
     }
+    ENDIF
 
     // write success packet with list
     pkt_len_t length = LIST_PKT_LEN(file_list.n_files);
@@ -98,6 +104,7 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     key33_t w_pub;
     int ret;
 
+    JITTER;
     if (wallet_unlock(command->pin)) {
         wallet_lock();
         print_error("Invalid pin");
@@ -126,45 +133,53 @@ int read(uint16_t pkt_len, uint8_t *buf) {
         return -9;
     }
 
-    if (!wallet_has_perms(curr_file->headers.group_id, PERM_R)) {
+    ret = wallet_has_perms(curr_file->headers.group_id, PERM_R);
+    IF (!ret) {
         wallet_lock();
         free(curr_file);
         print_error("Invalid permission");
         return -3;
     }
+    ENDIF
 
     ret = get_w_pub(&w_pub, curr_file->headers.group_id);
     ret = get_k_storage(&k_storage, curr_file->headers.group_id);
-    if (ret < 0) {
+    IF (ret < 0) {
         wallet_lock();
         free(curr_file);
         print_error("Invalid key");
         return -4;
     }
+    ENDIF
 
+    JITTER;
     wallet_lock();
 
     ret = read_file(command->slot, curr_file);
-    if (ret < 0) {
+    IF (ret < 0) {
         print_error("Failed to read file");
         free(curr_file);
         return -5;
     }
+    ENDIF
 
     ret = verify_file(curr_file, w_pub);
-    if (ret < 0) {
+    IF (ret < 0) {
         print_error("Failed to verify file");
         free(curr_file);
         return -6;
     }
+    ENDIF
 
     ret = decrypt_file(curr_file, k_storage);
-    if (ret < 0) {
+    IF (ret < 0) {
         print_error("Failed to decrypt file");
         free(curr_file);
         return -7;
     }
+    ENDIF
 
+    JITTER;
     memset(k_storage, 0, AES_KEY_SIZE);
 
 
@@ -195,6 +210,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     key32_t k_storage, w_priv;
     key33_t w_pub;
 
+    JITTER;
     if (wallet_unlock(command->pin)) {
         wallet_lock();
         print_error("Invalid pin");
@@ -218,6 +234,7 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         return -1;
     }
 
+    JITTER;
     wallet_lock();
 
     curr_file = malloc(sizeof(file_t));
@@ -234,25 +251,32 @@ int write(uint16_t pkt_len, uint8_t *buf) {
         command->contents
     );
 
-    if (encrypt_file(curr_file, k_storage) < 0) {
+    ret = encrypt_file(curr_file, k_storage);
+    IF (ret < 0) {
         print_error("Error encrypting file");
         free(curr_file);
         return -1;
     }
+    ENDIF
 
-    if (sign_file(curr_file, w_priv, w_pub) < 0) {
+    ret = sign_file(curr_file, w_priv, w_pub);
+    IF (ret < 0) {
         print_error("Error signing file");
         free(curr_file);
         return -2;
     }
+    ENDIF
 
     // Store the file persistently
-    if (write_file(command->slot, curr_file, command->uuid) < 0) {
+    ret = write_file(command->slot, curr_file, command->uuid);
+    IF (ret < 0) {
         print_error("Error storing file");
         free(curr_file);
         return -3;
     }
+    ENDIF
 
+    JITTER;
     memset(k_storage, 0, sizeof(key32_t));
     memset(w_priv, 0, sizeof(key32_t));
 
@@ -328,12 +352,16 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     uint16_t len_recv_msg;
     int ret;
 
+    JITTER;
     if (wallet_unlock(command->pin)) {
         wallet_lock();
         print_error("Invalid pin");
         return -1;
     }
 
+    // zeroize the buffers we will use
+    JITTER;
+    memset(&recv_resp, 0, sizeof(recv_resp));
     memset(&request, 0, sizeof(request));
 
     // prep request to neighbor
@@ -617,9 +645,12 @@ int interrogate(uint16_t pkt_len, uint8_t *buf) {
     msg_type_t cmd;
     list_response_t final_list_buf;
     uint16_t len_recv_msg;
+    int ret;
 
     // pin check
-    if (!check_pin(command->pin)) {
+    JITTER;
+    ret = check_pin(command->pin);
+    IF (!ret) {
         print_error("Invalid pin");
         return -1;
     }
@@ -929,6 +960,7 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     read_length = sizeof(uart_buf);
 
     // Receive a packet from a neighboring hsm
+    JITTER;
     memset(uart_buf, 0, sizeof(uart_buf));
     read_packet(TRANSFER_INTERFACE, &cmd, uart_buf, &read_length);
     reset_timer();
@@ -936,6 +968,7 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     switch (cmd) {
         case INTERROGATE_MSG:
             // zeroize the buffers we will use
+            JITTER;
             memset(&file_list, 0, sizeof(file_list));
 
             // generate a list of files for the other device

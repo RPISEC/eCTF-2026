@@ -27,6 +27,7 @@
 #include "status_led.h"
 #include "simple_uart.h"
 #include "hardware_crypto.h"
+#include "macros.h"
 #include "simple_trng.h"
 #include "wallet.h"
 #include "timer.h"
@@ -118,7 +119,7 @@ int main(void) {
         memset(uart_buf, 0, sizeof(uart_buf));
         result = read_packet(CONTROL_INTERFACE, &cmd, uart_buf, &pkt_len);
 
-        if (result != MSG_OK) {
+        IF (result != MSG_OK)
             STATUS_LED_OFF();
             switch (result)
             {
@@ -136,7 +137,8 @@ int main(void) {
                 break;
             }
             continue;
-        }
+        ENDIF
+        JITTER;
 
         // Handle the requested command
         switch (cmd) {

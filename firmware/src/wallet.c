@@ -3,6 +3,7 @@
 
 #include "secrets.h"
 #include "wallet.h"
+#include "macros.h"
 #include "simple_crypto.h"
 
 // clear wallet
@@ -60,6 +61,7 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
 
     ret = wc_PBKDF2(pin_key, pin, 6, wallet->pin_salt, PIN_SALT_LEN,
                     WALLET_ITERS, sizeof(key32_t), WC_HASH_TYPE_SHA256);
+    JITTER;
     if (ret != 0) {
         return -1;
     }
@@ -87,7 +89,7 @@ void wallet_lock(void) {
 bool wallet_has_perms(uint16_t group_id, uint8_t perms) {
     int index = get_group_index(group_id);
 
-    if (index < 0)
+    if (index < 0 || index >= MAX_NUM_GROUPS)
         return false; // Group does not exist
 
     uint8_t group_perms = wallet->clear.perms[index];
@@ -112,7 +114,7 @@ WARN_UNUSED_RESULT int get_k_storage(key32_t *key, uint16_t group_id) {
         return -1;
 
     int index = get_group_index(group_id);
-    if (index < 0)
+    if (index < 0 || index >= MAX_NUM_GROUPS)
         return -2;
 
     if (!wallet_has_perms(group_id, PERM_R | PERM_W))
@@ -129,7 +131,7 @@ WARN_UNUSED_RESULT int get_c_priv(key32_t *key, uint16_t group_id) {
         return -1;
 
     int index = get_group_index(group_id);
-    if (index < 0)
+    if (index < 0 || index >= MAX_NUM_GROUPS)
         return -2;
 
     if (!wallet_has_perms(group_id, PERM_C))
@@ -146,7 +148,7 @@ WARN_UNUSED_RESULT int get_w_priv(key32_t *key, uint16_t group_id) {
         return -1;
 
     int index = get_group_index(group_id);
-    if (index < 0)
+    if (index < 0 || index >= MAX_NUM_GROUPS)
         return -2;
 
     if (!wallet_has_perms(group_id, PERM_W))
@@ -160,7 +162,7 @@ WARN_UNUSED_RESULT int get_w_priv(key32_t *key, uint16_t group_id) {
 /* Returns 0 on success. */
 WARN_UNUSED_RESULT int get_w_pub(key33_t *key, uint16_t group_id) {
     int index = get_group_index(group_id);
-    if (index < 0)
+    if (index < 0 || index >= MAX_NUM_GROUPS)
         return -2;
 
     memcpy(key, wallet->clear.w_pub[index], sizeof(key33_t));
@@ -171,7 +173,7 @@ WARN_UNUSED_RESULT int get_w_pub(key33_t *key, uint16_t group_id) {
 /* Returns 0 on success. */
 WARN_UNUSED_RESULT int get_c_pub(key33_t *key, uint16_t group_id) {
     int index = get_group_index(group_id);
-    if (index < 0)
+    if (index < 0 || index >= MAX_NUM_GROUPS)
         return -2;
 
     memcpy(key, wallet->clear.c_pub[index], sizeof(key33_t));
