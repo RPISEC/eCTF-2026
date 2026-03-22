@@ -654,6 +654,7 @@ int interrogate(uint16_t pkt_len, uint8_t *buf) {
         print_error("Invalid pin");
         return -1;
     }
+    ENDIF
 
     // request the file list from the neighboring device
     write_packet(TRANSFER_INTERFACE, INTERROGATE_MSG, NULL, 0);
