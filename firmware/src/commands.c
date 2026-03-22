@@ -499,6 +499,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
         wc_ecc_key_free(b_pub);
         wallet_lock();
+        memset(shared_key, 0, sizeof(key32_t));
         return -13;
     }
 
@@ -523,6 +524,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
         wc_ecc_key_free(b_pub);
         wallet_lock();
+        memset(shared_key, 0, sizeof(key32_t));
         return -7;
     }
 
@@ -538,6 +540,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         free(recv_resp);
         wc_ecc_key_free(b_pub);
         wallet_lock();
+        memset(shared_key, 0, sizeof(key32_t));
         return -8;
     }
 
@@ -550,6 +553,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     print_debug("Decrypting packet with key:");
     print_hex_debug(shared_key, sizeof(key32_t));
+    memset(shared_key, 0, sizeof(key32_t));
 
     if (ret < 0) {
         print_error("Failed to decrypt received data");
@@ -561,7 +565,6 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Decrypted packet");
-    print_hex_debug(shared_key, sizeof(key32_t));
     print_time();
 
     key33_t w_pub;
@@ -816,6 +819,7 @@ static int handle_receive(receive_request_t *recv_req) {
         print_hex_debug(&ret, sizeof(ret));
         print_hex_debug(&shared_size, sizeof(shared_size));
         print_error("Shared key failed");
+        memset(shared_key, 0, sizeof(key32_t));
 
         wc_ecc_key_free(a_pub);
         return -9;
@@ -833,6 +837,7 @@ static int handle_receive(receive_request_t *recv_req) {
         print_error("Insufficient memory for receive response");
 
         wc_ecc_key_free(a_pub);
+        memset(shared_key, 0, sizeof(key32_t));
         return -10;
     }
 
@@ -845,6 +850,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
             free(recv_resp);
             wc_ecc_key_free(a_pub);
+            memset(shared_key, 0, sizeof(key32_t));
             return -11;
         }
         memcpy(&recv_resp->iv[i * 4], &rand, 4);
@@ -858,6 +864,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
         free(recv_resp);
         wc_ecc_key_free(a_pub);
+        memset(shared_key, 0, sizeof(key32_t));
         return -12;
     }
 
@@ -870,6 +877,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
         free(recv_resp);
         wc_ecc_key_free(a_pub);
+        memset(shared_key, 0, sizeof(key32_t));
         return -13;
     }
 
@@ -879,6 +887,7 @@ static int handle_receive(receive_request_t *recv_req) {
     ret = encrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t), shared_key,
                       recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                       recv_resp->uuid);
+    memset(shared_key, 0, sizeof(key32_t));
     if (ret < 0) {
         write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
 
@@ -890,7 +899,6 @@ static int handle_receive(receive_request_t *recv_req) {
     }
 
     print_debug("Encrypted file packet with key:");
-    print_hex_debug(shared_key, sizeof(key32_t));
     print_time();
 
     // Send response
