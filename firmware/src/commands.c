@@ -262,19 +262,24 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     return 0;
 }
 
-static ecc_key key_cx;
-static ecc_key key_cx_old;
+static ecc_key key_cx = {0};
+static ecc_key key_cx_old = {0};
 static bool key_cx_valid = false;
 int generate_key_cx(void) {
     WC_RNG *rng;
     int ret;
 
+    memcpy(&key_cx_old, &key_cx, sizeof(key_cx));
+
+    // If the previous key was not freed, free it
+    // Wolfcrypt handles the NULL case fine, so double frees will not
+    // cause any issues
+    wc_ecc_free(&key_cx);
+
     rng = wc_rng_new(NULL, 0, NULL);
     if (rng == NULL) {
         return -1;
     }
-
-    memcpy(&key_cx_old, &key_cx, sizeof(key_cx));
 
     ret = wc_ecc_init(&key_cx);
     if (ret < 0) {
@@ -300,7 +305,8 @@ int generate_key_cx(void) {
     }
 
     key_cx_valid = true;
-    wc_ecc_free(&key_cx);
+    // Keep key_cx in memory for the subsequent receive flow.
+    // (Do not free key_cx here, otherwise trade path uses freed key and gets all zero pub)
     wc_FreeRng(rng);
     return 0;
 }
@@ -541,6 +547,10 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     ret = decrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t),
                 shared_key, recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                 recv_resp->uuid);
+
+    print_debug("Decrypting packet with key:");
+    print_hex_debug(shared_key, sizeof(key32_t));
+
     if (ret < 0) {
         print_error("Failed to decrypt received data");
 
@@ -551,6 +561,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
 
     print_debug("Decrypted packet");
+    print_hex_debug(shared_key, sizeof(key32_t));
     print_time();
 
     key33_t w_pub;
@@ -810,7 +821,8 @@ static int handle_receive(receive_request_t *recv_req) {
         return -9;
     }
 
-    print_debug("derived shared key");
+    print_debug("derived shared key:");
+    print_hex_debug(shared_key, sizeof(key32_t));
     print_time();
 
     // Read file into response, encrypt response
@@ -877,7 +889,8 @@ static int handle_receive(receive_request_t *recv_req) {
         return -14;
     }
 
-    print_debug("Encrypted file packet");
+    print_debug("Encrypted file packet with key:");
+    print_hex_debug(shared_key, sizeof(key32_t));
     print_time();
 
     // Send response
