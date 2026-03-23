@@ -153,6 +153,14 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     ENDIF
 
     ret = get_w_pub(&w_pub, curr_file->headers.group_id);
+    IF (ret < 0) {
+        wallet_lock();
+        free(curr_file);
+        print_error("Invalid key");
+        return -4;
+    }
+    ENDIF
+
     ret = get_k_storage(&k_storage, curr_file->headers.group_id);
     IF (ret < 0) {
         wallet_lock();
@@ -258,6 +266,12 @@ int write(uint16_t pkt_len, uint8_t *buf) {
     ENDIF
 
     ret = get_w_pub(&w_pub, command->group_id);
+    IF (ret < 0) {
+        wallet_lock();
+        print_error("Invalid permission");
+        return -1;
+    }
+    ENDIF
 
     ret = get_k_storage(&k_storage, command->group_id);
     IF (ret < 0) {
@@ -504,6 +518,21 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     key32_t c_priv;
     key33_t c_pub;
     ret = get_c_pub(&c_pub, chal_ctx.group_id);
+    IF (ret < 0) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+        print_hex_debug(&chal_ctx, sizeof(chal_ctx));
+        print_error("Invalid permission");
+
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        return -5;
+    }
+    ENDIF
+
     ret = get_c_priv(&c_priv, chal_ctx.group_id);
     IF (ret < 0) {
         ret = generate_key_cx();
@@ -650,6 +679,16 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
     key33_t w_pub;
     ret = get_w_pub(&w_pub, chal_ctx.group_id);
+    IF (ret < 0) {
+        print_error("Invalid key");
+
+        free(recv_resp);
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        return -10;
+    }
+    ENDIF
+
     ret = verify_file(&recv_resp->file, w_pub);
     IF (ret < 0) {
         print_error("Failed to verify file signature");
@@ -874,6 +913,15 @@ static int handle_receive(receive_request_t *recv_req) {
     // Verify challenge signature
     key33_t c_pub;
     ret = get_c_pub(&c_pub, chal_ctx.group_id);
+    IF (ret < 0) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
+        print_error("Invalid permission");
+
+        return -7;
+    }
+    ENDIF
+
     ret = verify_msg((uint8_t *)&chal_ctx,
                      sizeof(chal_ctx) - sizeof(chal_ctx.signature) - sizeof(chal_ctx.sig_len),
                      chal_ctx.signature, chal_ctx.sig_len, c_pub);
