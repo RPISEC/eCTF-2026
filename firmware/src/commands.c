@@ -65,6 +65,11 @@ void generate_list_files(list_response_t *file_list) {
  * @return 0 upon success. A negative value on error.
 */
 int list(uint16_t pkt_len, uint8_t *buf) {
+    if (pkt_len != sizeof(list_command_t)) {
+        print_error("Invalid list packet length");
+        return -1;
+    }
+
     list_command_t *command = (list_command_t*)buf;
     static list_response_t file_list;
     int ret;
@@ -98,6 +103,11 @@ int list(uint16_t pkt_len, uint8_t *buf) {
  * @return 0 upon success. A negative value on error.
 */
 int read(uint16_t pkt_len, uint8_t *buf) {
+    if (pkt_len != sizeof(read_command_t)) {
+        print_error("Invalid read packet length");
+        return -1;
+    }
+
     read_command_t *command = (read_command_t*)buf;
     file_t *curr_file;
     key32_t k_storage;
@@ -204,11 +214,30 @@ int read(uint16_t pkt_len, uint8_t *buf) {
  * @return 0 upon success. A negative value on error.
 */
 int write(uint16_t pkt_len, uint8_t *buf) {
+    const uint16_t write_header_len = sizeof(write_command_t) - MAX_CONTENTS_SIZE;
+    uint16_t expected_len;
+
+    if (pkt_len < write_header_len) {
+        print_error("Short write packet");
+        return -1;
+    }
+
     write_command_t *command = (write_command_t*)buf;
     int ret;
     file_t *curr_file;
     key32_t k_storage, w_priv;
     key33_t w_pub;
+
+    if (command->contents_len > MAX_CONTENTS_SIZE) {
+        print_error("Write contents too long");
+        return -1;
+    }
+
+    expected_len = write_header_len + command->contents_len;
+    if (pkt_len != expected_len) {
+        print_error("Invalid write packet length");
+        return -1;
+    }
 
     JITTER;
     ret = wallet_unlock(command->pin);
@@ -351,6 +380,11 @@ int generate_key_cx(void) {
  * @return 0 upon success. A negative value on error.
 */
 int receive(uint16_t pkt_len, uint8_t *buf) {
+    if (pkt_len != sizeof(receive_command_t)) {
+        print_error("Invalid receive packet length");
+        return -1;
+    }
+
     // A side of connection
     receive_command_t *command = (receive_command_t *)buf;
     receive_request_t request;
@@ -663,6 +697,11 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
  * @return 0 upon success. A negative value on error.
  */
 int interrogate(uint16_t pkt_len, uint8_t *buf) {
+    if (pkt_len != sizeof(interrogate_command_t)) {
+        print_error("Invalid interrogate packet length");
+        return -1;
+    }
+
     interrogate_command_t *command = (interrogate_command_t*)buf;
     msg_type_t cmd;
     list_response_t final_list_buf;
@@ -995,16 +1034,30 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     list_response_t file_list;
     int ret;
 
+    if (pkt_len != 0) {
+        print_error("Invalid listen packet length");
+        return -1;
+    }
+
     read_length = sizeof(uart_buf);
 
     // Receive a packet from a neighboring hsm
     JITTER;
     memset(uart_buf, 0, sizeof(uart_buf));
-    read_packet(TRANSFER_INTERFACE, &cmd, uart_buf, &read_length);
+    ret = read_packet(TRANSFER_INTERFACE, &cmd, uart_buf, &read_length);
+    if (ret != MSG_OK) {
+        print_error("Failed to read transfer packet");
+        return -1;
+    }
     reset_timer();
 
     switch (cmd) {
         case INTERROGATE_MSG:
+            if (read_length != 0) {
+                print_error("Invalid interrogate transfer length");
+                return -1;
+            }
+
             // zeroize the buffers we will use
             JITTER;
             memset(&file_list, 0, sizeof(file_list));
@@ -1020,6 +1073,11 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
             write_packet(TRANSFER_INTERFACE, INTERROGATE_MSG, &file_list, write_length);
             break;
         case RECEIVE_MSG:
+            if (read_length != sizeof(receive_request_t)) {
+                print_error("Invalid receive transfer length");
+                return -1;
+            }
+
             ret = handle_receive((receive_request_t *)uart_buf);
             if (ret < 0)
                 return ret;
@@ -1033,4 +1091,3 @@ int listen(uint16_t pkt_len, uint8_t *buf) {
     write_packet(CONTROL_INTERFACE, LISTEN_MSG, NULL, 0);
     return 0;
 }
-
