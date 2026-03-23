@@ -72,8 +72,8 @@ int create_file(
     dest->headers.group_id = group_id;
     dest->headers.contents_len = contents_len;
 
-    // name must be null terminated, and the contents are defined by a length
-    strcpy(dest->headers.name, name);
+    // Name is a fixed-width field in the protocol; copy exact bytes.
+    memcpy(dest->headers.name, name, MAX_NAME_SIZE);
     memcpy(dest->contents, contents, contents_len);
 
     return 0;

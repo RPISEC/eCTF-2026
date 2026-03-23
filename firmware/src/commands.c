@@ -46,7 +46,7 @@ void generate_list_files(list_response_t *file_list) {
 
             file_list->metadata[file_list->n_files].slot = i;
             file_list->metadata[file_list->n_files].group_id = temp_headers.group_id;
-            strcpy(file_list->metadata[file_list->n_files].name, (char *)&temp_headers.name);
+            memcpy(file_list->metadata[file_list->n_files].name, temp_headers.name, MAX_NAME_SIZE);
             file_list->n_files++;
         }
     }
