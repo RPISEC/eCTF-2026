@@ -660,7 +660,7 @@ int interrogate(uint16_t pkt_len, uint8_t *buf) {
     write_packet(TRANSFER_INTERFACE, INTERROGATE_MSG, NULL, 0);
 
     // set essentially no limit to the receive message size
-    len_recv_msg = 0xffff;
+    len_recv_msg = sizeof(final_list_buf);
 
     // receive the response message
     read_packet(TRANSFER_INTERFACE, &cmd, &final_list_buf, &len_recv_msg);
