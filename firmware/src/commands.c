@@ -19,6 +19,7 @@
 #include "simple_trng.h"
 #include "simple_uart.h"
 #include "timer.h"
+#include <wolfssl/wolfcrypt/kdf.h>
 
 /* IMPORTANT COMPONENTS FROM HSM.c */
 // extern file_t hsm_status[MAX_FILE_COUNT];
@@ -153,7 +154,7 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     ENDIF
 
     ret = get_w_pub(&w_pub, curr_file->headers.group_id);
-    IF (ret < 0) {
+    IF (ret != 0) {
         wallet_lock();
         free(curr_file);
         print_error("Invalid key");
@@ -618,6 +619,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     ENDIF
 
     key32_t shared_key;
+    key32_t session_key;
     uint32_t shared_size = 32;
     ret = wc_ecc_shared_secret(&key_cx, b_pub, shared_key, &shared_size);
     IF (ret != 0 || shared_size != 32) {
@@ -639,12 +641,31 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
     ENDIF
 
-    print_hex_debug(shared_key, 32);
+    ret = wc_HKDF(WC_SHA256, shared_key, sizeof(key32_t), NULL, 0, NULL, 0,
+                  session_key, sizeof(key32_t));
+    memset(shared_key, 0, sizeof(key32_t));
+    IF (ret < 0) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+        print_error("HKDF failed");
+
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        memset(session_key, 0, sizeof(key32_t));
+        return -13;
+    }
+    ENDIF
+
+    print_hex_debug(session_key, 32);
     print_debug("Generated shared key");
     print_time();
 
     ret = generate_key_cx();
-    if (ret < 0) {
+    if (ret != 0) {
         print_debug("Failed to generate next exchange key");
     }
 
@@ -660,7 +681,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
 
         wc_ecc_key_free(b_pub);
         wallet_lock();
-        memset(shared_key, 0, sizeof(key32_t));
+        memset(session_key, 0, sizeof(key32_t));
         return -7;
     }
 
@@ -676,7 +697,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         free(recv_resp);
         wc_ecc_key_free(b_pub);
         wallet_lock();
-        memset(shared_key, 0, sizeof(key32_t));
+        memset(session_key, 0, sizeof(key32_t));
         return -8;
     }
     ENDIF
@@ -688,7 +709,7 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         free(recv_resp);
         wc_ecc_key_free(b_pub);
         wallet_lock();
-        memset(shared_key, 0, sizeof(key32_t));
+        memset(session_key, 0, sizeof(key32_t));
         return -8;
     }
     ENDIF
@@ -697,12 +718,12 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     print_time();
 
     ret = decrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t),
-                shared_key, recv_resp->iv, recv_resp->auth_tag, NULL, 0,
+                session_key, recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                 recv_resp->uuid);
 
     print_debug("Decrypting packet with key:");
-    print_hex_debug(shared_key, sizeof(key32_t));
-    memset(shared_key, 0, sizeof(key32_t));
+    print_hex_debug(session_key, sizeof(key32_t));
+    memset(session_key, 0, sizeof(key32_t));
 
     IF (ret < 0) {
         print_error("Failed to decrypt received data");
@@ -1036,6 +1057,7 @@ static int handle_receive(receive_request_t *recv_req) {
     ENDIF
 
     key32_t shared_key;
+    key32_t session_key;
     uint32_t shared_size = 32;
     ret = wc_ecc_shared_secret(&key_cx_old, a_pub, shared_key, &shared_size);
     if (ret != 0 || shared_size != 32) {
@@ -1050,8 +1072,20 @@ static int handle_receive(receive_request_t *recv_req) {
         return -9;
     }
 
+    ret = wc_HKDF(WC_SHA256, shared_key, sizeof(key32_t), NULL, 0, NULL, 0,
+                  session_key, sizeof(key32_t));
+    memset(shared_key, 0, sizeof(key32_t));
+    if (ret < 0) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+        print_error("HKDF failed");
+        memset(session_key, 0, sizeof(key32_t));
+
+        wc_ecc_key_free(a_pub);
+        return -9;
+    }
+
     print_debug("derived shared key:");
-    print_hex_debug(shared_key, sizeof(key32_t));
+    print_hex_debug(session_key, sizeof(key32_t));
     print_time();
 
     // Read file into response, encrypt response
@@ -1062,7 +1096,7 @@ static int handle_receive(receive_request_t *recv_req) {
         print_error("Insufficient memory for receive response");
 
         wc_ecc_key_free(a_pub);
-        memset(shared_key, 0, sizeof(key32_t));
+        memset(session_key, 0, sizeof(key32_t));
         return -10;
     }
     ENDIF
@@ -1076,7 +1110,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
             free(recv_resp);
             wc_ecc_key_free(a_pub);
-            memset(shared_key, 0, sizeof(key32_t));
+            memset(session_key, 0, sizeof(key32_t));
             return -11;
         }
         ENDIF
@@ -1091,7 +1125,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
         free(recv_resp);
         wc_ecc_key_free(a_pub);
-        memset(shared_key, 0, sizeof(key32_t));
+        memset(session_key, 0, sizeof(key32_t));
         return -12;
     }
     ENDIF
@@ -1105,7 +1139,7 @@ static int handle_receive(receive_request_t *recv_req) {
 
         free(recv_resp);
         wc_ecc_key_free(a_pub);
-        memset(shared_key, 0, sizeof(key32_t));
+        memset(session_key, 0, sizeof(key32_t));
         return -13;
     }
 
@@ -1115,17 +1149,17 @@ static int handle_receive(receive_request_t *recv_req) {
 
         free(recv_resp);
         wc_ecc_key_free(a_pub);
-        memset(shared_key, 0, sizeof(key32_t));
+        memset(session_key, 0, sizeof(key32_t));
         return -13;
     }
 
     print_debug("Read file");
     print_time();
 
-    ret = encrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t), shared_key,
+    ret = encrypt_sym(recv_resp->uuid, UUID_SIZE + sizeof(file_t), session_key,
                       recv_resp->iv, recv_resp->auth_tag, NULL, 0,
                       recv_resp->uuid);
-    memset(shared_key, 0, sizeof(key32_t));
+    memset(session_key, 0, sizeof(key32_t));
     IF (ret < 0) {
         write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
 
