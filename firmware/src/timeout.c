@@ -17,7 +17,9 @@
  * @param time Time to timeout, in millseconds
  */
 void timeout(int time) {
-    while (get_timer_ms() < time) {
+    // Timeout is relative to when this function is called.
+    reset_timer();
+    while (get_timer_ms() < (uint64_t)time) {
         JITTER;
     }
 }
