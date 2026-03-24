@@ -197,6 +197,12 @@ int read(uint16_t pkt_len, uint8_t *buf) {
     }
     ENDIF
 
+    if (curr_file->headers.contents_len > MAX_CONTENTS_SIZE) {
+        print_error("Invalid file length");
+        free(curr_file);
+        return -10;
+    }
+
     JITTER;
     memset(k_storage, 0, AES_KEY_SIZE);
 
@@ -447,8 +453,17 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     ENDIF
 
     receive_challenge_t chal_ctx;
+    memset(&chal_ctx, 0, sizeof(chal_ctx));
     len_recv_msg = sizeof(chal_ctx);
-    read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
+    ret = read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
+    IF (ret != MSG_OK || len_recv_msg != sizeof(chal_ctx)) {
+        print_error("Invalid challenge packet");
+
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        return -3;
+    }
+    ENDIF
     IF (cmd != RECEIVE_MSG) {
         print_error("Error on listening side.");
 
@@ -549,10 +564,23 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     }
     ENDIF
 
-    sign_msg((uint8_t *)&chal_ctx,
-             sizeof(chal_ctx) - sizeof(chal_ctx.signature) -
-                 sizeof(chal_ctx.sig_len),
-             chal_ctx.signature, &chal_ctx.sig_len, c_priv, c_pub);
+    ret = sign_msg((uint8_t *)&chal_ctx,
+                   sizeof(chal_ctx) - sizeof(chal_ctx.signature) -
+                       sizeof(chal_ctx.sig_len),
+                   chal_ctx.signature, &chal_ctx.sig_len, c_priv, c_pub);
+    IF (ret < 0) {
+        ret = generate_key_cx();
+        if (ret < 0) {
+            print_debug("Failed to generate next exchange key");
+        }
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+        print_error("Failed to sign challenge");
+
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        return -16;
+    }
+    ENDIF
 
     print_debug("Signed challenge");
     print_time();
@@ -639,7 +667,19 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
     memset(recv_resp, 0, sizeof(*recv_resp));
 
     len_recv_msg = sizeof(*recv_resp);
-    read_packet(TRANSFER_INTERFACE, &cmd, recv_resp, &len_recv_msg);
+    ret = read_packet(TRANSFER_INTERFACE, &cmd, recv_resp, &len_recv_msg);
+    IF (ret != MSG_OK || len_recv_msg != sizeof(*recv_resp)) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+
+        print_error("Invalid receive response packet");
+
+        free(recv_resp);
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        memset(shared_key, 0, sizeof(key32_t));
+        return -8;
+    }
+    ENDIF
     IF (cmd != RECEIVE_MSG) {
         write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
 
@@ -699,6 +739,15 @@ int receive(uint16_t pkt_len, uint8_t *buf) {
         return -10;
     }
     ENDIF
+
+    if (recv_resp->file.headers.contents_len > MAX_CONTENTS_SIZE) {
+        print_error("Invalid file length");
+
+        free(recv_resp);
+        wc_ecc_key_free(b_pub);
+        wallet_lock();
+        return -10;
+    }
 
     print_debug("Verified file");
     print_time();
@@ -761,11 +810,28 @@ int interrogate(uint16_t pkt_len, uint8_t *buf) {
 
     // set essentially no limit to the receive message size
     len_recv_msg = sizeof(final_list_buf);
+    memset(&final_list_buf, 0, sizeof(final_list_buf));
 
     // receive the response message
-    read_packet(TRANSFER_INTERFACE, &cmd, &final_list_buf, &len_recv_msg);
+    ret = read_packet(TRANSFER_INTERFACE, &cmd, &final_list_buf, &len_recv_msg);
+    if (ret != MSG_OK) {
+        print_error("Failed to read interrogate response");
+        return -1;
+    }
     if (cmd != INTERROGATE_MSG) {
         print_error("Opcode mismatch");
+        return -1;
+    }
+    if (len_recv_msg < sizeof(final_list_buf.n_files)) {
+        print_error("Interrogate packet too short");
+        return -1;
+    }
+    if (final_list_buf.n_files > MAX_FILE_COUNT) {
+        print_error("Interrogate file count too large");
+        return -1;
+    }
+    if (len_recv_msg != LIST_PKT_LEN(final_list_buf.n_files)) {
+        print_error("Invalid interrogate packet length");
         return -1;
     }
 
@@ -890,7 +956,14 @@ static int handle_receive(receive_request_t *recv_req) {
     print_time();
 
     len_recv_msg = sizeof(chal_ctx);
-    read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
+    memset(&chal_ctx, 0, sizeof(chal_ctx));
+    ret = read_packet(TRANSFER_INTERFACE, &cmd, &chal_ctx, &len_recv_msg);
+    IF (ret != MSG_OK || len_recv_msg != sizeof(chal_ctx)) {
+        print_error("Invalid challenge response packet");
+
+        return -5;
+    }
+    ENDIF
     IF (cmd != RECEIVE_MSG) {
         print_error("Error on receiving side.");
 
@@ -1029,6 +1102,16 @@ static int handle_receive(receive_request_t *recv_req) {
         write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
 
         print_error("Failed to read file");
+
+        free(recv_resp);
+        wc_ecc_key_free(a_pub);
+        memset(shared_key, 0, sizeof(key32_t));
+        return -13;
+    }
+
+    if (recv_resp->file.headers.contents_len > MAX_CONTENTS_SIZE) {
+        write_packet(TRANSFER_INTERFACE, ERROR_MSG, NULL, 0);
+        print_error("Invalid file length");
 
         free(recv_resp);
         wc_ecc_key_free(a_pub);

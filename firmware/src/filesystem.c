@@ -137,6 +137,9 @@ int write_file(slot_t slot, file_t *src, const uint8_t *uuid) {
     if (slot < 0 || slot >= MAX_FILE_COUNT) {
         return -1;
     }
+    if (src->headers.contents_len > MAX_CONTENTS_SIZE) {
+        return -2;
+    }
 
     flash_addr = FILE_START_PAGE_FROM_SLOT(slot);
     length = FILE_TOTAL_SIZE(src->headers.contents_len);
