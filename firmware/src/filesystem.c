@@ -72,8 +72,8 @@ int create_file(
     dest->headers.group_id = group_id;
     dest->headers.contents_len = contents_len;
 
-    // name must be null terminated, and the contents are defined by a length
-    strcpy(dest->headers.name, name);
+    // Name is a fixed-width field in the protocol; copy exact bytes.
+    memcpy(dest->headers.name, name, MAX_NAME_SIZE);
     memcpy(dest->contents, contents, contents_len);
 
     return 0;
@@ -137,6 +137,9 @@ int write_file(slot_t slot, file_t *src, const uint8_t *uuid) {
     if (slot < 0 || slot >= MAX_FILE_COUNT) {
         return -1;
     }
+    if (src->headers.contents_len > MAX_CONTENTS_SIZE) {
+        return -2;
+    }
 
     flash_addr = FILE_START_PAGE_FROM_SLOT(slot);
     length = FILE_TOTAL_SIZE(src->headers.contents_len);
@@ -189,6 +192,10 @@ int read_file(slot_t slot, file_t *dest) {
  * @return 0 upon success. A negative value otherwise.
 */
 int verify_file(file_t *file, const uint8_t *w_pub) {
+    if (file->sig_len == 0 || file->sig_len > sizeof(file->signature)) {
+        return -1;
+    }
+
     return verify_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature) - sizeof(file->sig_len),
                       file->signature, file->sig_len, w_pub);
 }

@@ -5,6 +5,7 @@
 #include "wallet.h"
 #include "macros.h"
 #include "simple_crypto.h"
+#include "timeout.h"
 
 // clear wallet
 typedef struct __attribute__((packed)) {
@@ -63,6 +64,8 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
                     WALLET_ITERS, sizeof(key32_t), WC_HASH_TYPE_SHA256);
     JITTER;
     if (ret != 0) {
+        memset(pin_key, 0, sizeof(key32_t));
+        timeout(TIMEOUT_PIN);
         return -1;
     }
 
@@ -70,6 +73,8 @@ WARN_UNUSED_RESULT int wallet_unlock(const unsigned char *pin) {
                       wallet->wallet_tag, (uint8_t *)&(wallet->clear),
                       CLEAR_STORAGE_LEN, (uint8_t *)&keystore);
     if (ret != 0) {
+        memset(pin_key, 0, sizeof(key32_t));
+        timeout(TIMEOUT_PIN);
         return -2;
     }
 
