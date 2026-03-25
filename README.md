@@ -1,3 +1,9 @@
+## Hello From RPISEC
+
+Happy Hacking
+[Our Site](https://rpis.ec/)
+
+
 ## Build Instructions
 1. To build, follow the [Boot Reference](https://rules.ectf.mitre.org/2026/getting_started/boot_reference.html) for your operating system.
 2. Optionally, install the MSPM0 SDK, TI-Clang, and Wolfcrypt to the `/opt` directory in your development environment, following the commands from the `Dockerfile`.
@@ -18,10 +24,3 @@
         - `gen_secrets.py` - Generates shared secrets
     - `pyproject.toml` - File that tells pip how to install this module
 - `Makefile` - Helper script to simplify repetitive build steps
-
-
-## Programming Guidelines
-- Document everything and use good code style
-- Avoid storing large objects on the stack; use static memory instead
-- Zero secrets immediately after using them
-- Test API before merging

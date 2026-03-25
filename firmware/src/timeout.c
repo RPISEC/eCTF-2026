@@ -11,7 +11,7 @@
 #include "macros.h"
 
 /**
- * @brief Times out the user for `time` millseconds, and sets a persistent flag.
+ * @brief Times out the user for `time` millseconds.
  *        This function is synchronous and will busy wait for the duration of
  *        the timeout.
  * @param time Time to timeout, in millseconds

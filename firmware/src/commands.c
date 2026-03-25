@@ -387,8 +387,6 @@ int generate_key_cx(void) {
 
     key_cx_valid = true;
     // Keep key_cx in memory for the subsequent receive flow.
-    // (Do not free key_cx here, otherwise trade path uses freed key and gets all zero pub)
-    wc_FreeRng(rng);
     return 0;
 }
 
