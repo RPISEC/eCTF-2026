@@ -192,6 +192,10 @@ int read_file(slot_t slot, file_t *dest) {
  * @return 0 upon success. A negative value otherwise.
 */
 int verify_file(file_t *file, const uint8_t *w_pub) {
+    if (file->sig_len == 0 || file->sig_len > sizeof(file->signature)) {
+        return -1;
+    }
+
     return verify_msg((uint8_t *)file, sizeof(*file) - sizeof(file->signature) - sizeof(file->sig_len),
                       file->signature, file->sig_len, w_pub);
 }
