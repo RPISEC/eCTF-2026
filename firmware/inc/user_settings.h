@@ -24,6 +24,7 @@ extern int custom_rand_generate_block(unsigned char* output, unsigned int sz);
 #define HAVE_ECC
 #define HAVE_COMP_KEY
 #define HAVE_ECC_KEY_EXPORT
+#define HAVE_HKDF
 #define NO_RSA
 #define NO_MD5
 
