@@ -97,7 +97,6 @@ typedef struct {
 
 typedef struct {
     pin_t pin;
-    group_id_t groups[8]; // MAX_NUM_GROUPS, without exposing secrets.h
 } interrogate_command_t;
 
 /**********************************************************
