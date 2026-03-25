@@ -1,7 +1,8 @@
 ## Hello From RPISEC
 
-Happy Hacking
-[Our Site](https://rpis.ec/)
+Happy Hacking.
+
+[Visit Us Here](https://rpis.ec/)
 
 
 ## Build Instructions
