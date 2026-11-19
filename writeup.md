@@ -1,0 +1,4 @@
+# Blog Post
+
+### Competition Overview
+In [eCTF 2026](https://ectf.mitre.org/), teams are tasked with designing secure firmware for a Hardware Security Module (HSM). The HSM must support permission groups with read/write/receive permissions. The HSM is PIN protected and should require users to enter the valid PIN before performing privileged actions. In the attack scenario, three HSM devices interact: technician, engineer, and lithography machine. The attacker has access to the technician PIN and hardware to the technician and engineer HSMs but only remote access to the lithography machine HSM. Teams must secure their firmware against this threat model, protecting HSM access and respecting file group permissions. We assume the attacker has access to source code, flash contents, and all inputs between devices.
